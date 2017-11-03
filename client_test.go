@@ -16,7 +16,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 
-	"github.com/juju/httprequest"
+	"gopkg.in/httprequest.v1"
 )
 
 type clientSuite struct {

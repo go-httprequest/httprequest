@@ -10,7 +10,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/httprequest"
+	"gopkg.in/httprequest.v1"
 )
 
 type contextSuite struct{}

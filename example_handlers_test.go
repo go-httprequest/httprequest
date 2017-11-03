@@ -10,7 +10,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
 
-	"github.com/juju/httprequest"
+	"gopkg.in/httprequest.v1"
 )
 
 type arithHandler struct {
