@@ -3,10 +3,6 @@
 
 // Package httprequest provides functionality for unmarshaling
 // HTTP request parameters into a struct type.
-//
-// Please note that the API is not considered stable at this
-// point and may be changed in a backwardly incompatible
-// manner at any time.
 package httprequest
 
 import (
