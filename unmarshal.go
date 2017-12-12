@@ -227,7 +227,11 @@ func unmarshalWithUnmarshalText(t reflect.Type, tag tag) unmarshaler {
 		panic("unexpected source")
 	}
 	return func(v reflect.Value, p Params, makeResult resultMaker) error {
-		val, _ := getVal(tag.name, p)
+		val, ok := getVal(tag.name, p)
+		if !ok {
+			// TODO allow specifying that a field is mandatory?
+			return nil
+		}
 		uv := makeResult(v).Addr().Interface().(encodingTextUnmarshaler)
 		return uv.UnmarshalText([]byte(val))
 	}

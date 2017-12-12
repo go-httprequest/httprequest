@@ -4,8 +4,10 @@
 package httprequest_test
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
@@ -34,19 +36,49 @@ var marshalTests = []struct {
 	expectError     string
 }{{
 	about:     "struct with simple fields",
-	urlString: "http://localhost:8081/:F1",
+	urlString: "http://localhost:8081/:F01",
 	val: &struct {
-		F1 int    `httprequest:",path"`
-		F2 string `httprequest:",form"`
-		F3 string `httprequest:",form,omitempty"`
-		F4 string `httprequest:",form,omitempty"`
+		F01 int        `httprequest:",path"`
+		F02 string     `httprequest:",form"`
+		F03 string     `httprequest:",form,omitempty"`
+		F04 string     `httprequest:",form,omitempty"`
+		F06 time.Time  `httprequest:",form,omitempty"`
+		F07 time.Time  `httprequest:",form,omitempty"`
+		F08 *time.Time `httprequest:",form,omitempty"`
+		F09 *time.Time `httprequest:",form,omitempty"`
+		F10 stringer   `httprequest:",form,omitempty"`
+		F11 stringer   `httprequest:",form,omitempty"`
+		F12 *stringer  `httprequest:",form,omitempty"`
+		F13 *stringer  `httprequest:",form,omitempty"`
+		F14 *stringer  `httprequest:",form,omitempty"`
+		F15 time.Time  `httprequest:",form"`
+		// Note that this gets omitted anyway because it's nil.
+		F16 *time.Time `httprequest:",form"`
 	}{
-		F1: 99,
-		F2: "some text",
-		F3: "",
-		F4: "something",
+		F01: 99,
+		F02: "some text",
+		F03: "",
+		F04: "something",
+		F07: time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC),
+		F09: func() *time.Time {
+			t := time.Date(2011, 2, 3, 4, 5, 6, 0, time.UTC)
+			return &t
+		}(),
+		F11: stringer(99),
+		F13: func() *stringer {
+			s := stringer(99)
+			return &s
+		}(),
+		F14: new(stringer),
 	},
-	expectURLString: "http://localhost:8081/99?F2=some+text&F4=something",
+	expectURLString: "http://localhost:8081/99" +
+		"?F02=some+text" +
+		"&F04=something" +
+		"&F07=2001-02-03T04%3A05%3A06Z" +
+		"&F09=2011-02-03T04%3A05%3A06Z" +
+		"&F11=str99" +
+		"&F13=str99" +
+		"&F15=0001-01-01T00%3A00%3A00Z",
 }, {
 	about:     "struct with renamed fields",
 	urlString: "http://localhost:8081/:name",
@@ -335,24 +367,52 @@ var marshalTests = []struct {
 	about:     "struct with headers",
 	urlString: "http://localhost:8081/",
 	val: &struct {
-		F1 string `httprequest:",header"`
-		F2 int    `httprequest:",header"`
-		F3 bool   `httprequest:",header"`
-		F4 string `httprequest:",header,omitempty"`
-		F5 string `httprequest:",header,omitempty"`
+		F01 string     `httprequest:",header"`
+		F02 int        `httprequest:",header"`
+		F03 bool       `httprequest:",header"`
+		F04 string     `httprequest:",header,omitempty"`
+		F05 string     `httprequest:",header,omitempty"`
+		F06 time.Time  `httprequest:",header,omitempty"`
+		F07 time.Time  `httprequest:",header,omitempty"`
+		F08 *time.Time `httprequest:",header,omitempty"`
+		F09 *time.Time `httprequest:",header,omitempty"`
+		F10 stringer   `httprequest:",header,omitempty"`
+		F11 stringer   `httprequest:",header,omitempty"`
+		F12 *stringer  `httprequest:",header,omitempty"`
+		F13 *stringer  `httprequest:",header,omitempty"`
+		F14 *stringer  `httprequest:",header,omitempty"`
+		F15 time.Time  `httprequest:",header"`
+		// Note that this gets omitted anyway because it's nil.
+		F16 *time.Time `httprequest:",header"`
 	}{
-		F1: "some text",
-		F2: 99,
-		F3: true,
-		F4: "",
-		F5: "something",
+		F01: "some text",
+		F02: 99,
+		F03: true,
+		F04: "",
+		F05: "something",
+		F07: time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC),
+		F09: func() *time.Time {
+			t := time.Date(2011, 2, 3, 4, 5, 6, 0, time.UTC)
+			return &t
+		}(),
+		F11: stringer(99),
+		F13: func() *stringer {
+			s := stringer(99)
+			return &s
+		}(),
+		F14: new(stringer),
 	},
 	expectURLString: "http://localhost:8081/",
 	expectHeader: http.Header{
-		"F1": []string{"some text"},
-		"F2": []string{"99"},
-		"F3": []string{"true"},
-		"F5": []string{"something"},
+		"F01": {"some text"},
+		"F02": {"99"},
+		"F03": {"true"},
+		"F05": {"something"},
+		"F07": {"2001-02-03T04:05:06Z"},
+		"F09": {"2011-02-03T04:05:06Z"},
+		"F11": {"str99"},
+		"F13": {"str99"},
+		"F15": {"0001-01-01T00:00:00Z"},
 	},
 }, {
 	about:     "struct with header slice",
@@ -387,9 +447,9 @@ var marshalTests = []struct {
 	},
 	expectURLString: "http://localhost:8081/",
 	expectHeader: http.Header{
-		"F1": []string{"some text"},
-		"F2": []string{"some other text"},
-		"F3": []string{"false"},
+		"F1": {"some text"},
+		"F2": {"some other text"},
+		"F3": {"false"},
 	},
 }}
 
@@ -426,7 +486,7 @@ func (*marshalSuite) TestMarshal(c *gc.C) {
 			c.Assert(string(data), gc.DeepEquals, *test.expectBody)
 		}
 		for k, v := range test.expectHeader {
-			c.Assert(req.Header[k], gc.DeepEquals, v)
+			c.Assert(req.Header[k], gc.DeepEquals, v, gc.Commentf("key %q", k))
 		}
 	}
 }
@@ -451,4 +511,10 @@ type failJSONMarshaler string
 
 func (*failJSONMarshaler) MarshalJSON() ([]byte, error) {
 	return nil, errgo.New("marshal error")
+}
+
+type stringer int
+
+func (s stringer) String() string {
+	return fmt.Sprintf("str%d", int(s))
 }

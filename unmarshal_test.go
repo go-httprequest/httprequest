@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"time"
 
 	jc "github.com/juju/testing/checkers"
 	"github.com/julienschmidt/httprouter"
@@ -33,19 +34,28 @@ var unmarshalTests = []struct {
 }{{
 	about: "struct with simple fields",
 	val: struct {
-		F1          int    `httprequest:",form"`
-		F2          int    `httprequest:",form"`
-		G1          string `httprequest:",path"`
-		G2          string `httprequest:",path"`
-		H           string `httprequest:",body"`
-		UnknownForm string `httprequest:",form"`
-		UnknownPath string `httprequest:",path"`
+		F1          int        `httprequest:",form"`
+		F2          int        `httprequest:",form"`
+		G1          string     `httprequest:",path"`
+		G2          string     `httprequest:",path"`
+		H           string     `httprequest:",body"`
+		T           time.Time  `httprequest:",form"`
+		TZ          time.Time  `httprequest:",form"`
+		TP          *time.Time `httprequest:",form"`
+		TPZ         *time.Time `httprequest:",form"`
+		UnknownForm string     `httprequest:",form"`
+		UnknownPath string     `httprequest:",path"`
 	}{
 		F1: 99,
 		F2: -35,
 		G1: "g1 val",
 		G2: "g2 val",
 		H:  "h val",
+		T:  time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC),
+		TP: func() *time.Time {
+			t := time.Date(2011, 2, 3, 4, 5, 6, 0, time.UTC)
+			return &t
+		}(),
 	},
 	params: httprequest.Params{
 		Request: &http.Request{
@@ -53,6 +63,8 @@ var unmarshalTests = []struct {
 			Form: url.Values{
 				"F1": {"99"},
 				"F2": {"-35", "not a number"},
+				"T":  {"2001-02-03T04:05:06Z"},
+				"TP": {"2011-02-03T04:05:06Z"},
 			},
 			Body: body(`"h val"`),
 		},
