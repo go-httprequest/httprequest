@@ -44,8 +44,13 @@ var emptyReader = bytes.NewReader(nil)
 // will be used to marshal the field, otherwise fmt.Sprint will be used.
 //
 // An "omitempty" attribute on a form or header field specifies that
-// if the form or header value is empty, the form or header entry
-// will be omitted.
+// if the form or header value is zero, the form or header entry
+// will be omitted. If the field is a nil pointer, it will be omitted;
+// otherwise if the field type implements IsZeroer, that method
+// will be used to determine whether the value is zero, otherwise
+// if the value is comparable, it will be compared with the zero
+// value for its type, otherwise the value will never be omitted.
+// One notable implementation of IsZeroer is time.Time.
 //
 // For example, this code:
 //
@@ -59,7 +64,7 @@ var emptyReader = bytes.NewReader(nil)
 //	    Extra string `httprequest:"context,form,omitempty"`
 //	    Details UserDetails `httprequest:",body"`
 //	}
-//	req, err := Marshal("GET", "http://example.com/users/:user/details", &Test{
+//	req, err := Marshal("http://example.com/users/:user/details", "GET", &Test{
 //	    Username: "bob",
 //	    ContextId: 1234,
 //	    Details: UserDetails{
@@ -209,7 +214,7 @@ func getMarshaler(tag tag, t reflect.Type) (marshaler, error) {
 	case implementsTextMarshaler(t):
 		return marshalWithMarshalText(t, tag), nil
 	default:
-		return marshalWithSprint(tag), nil
+		return marshalWithSprint(t, tag), nil
 	}
 }
 
@@ -255,6 +260,10 @@ func marshalAllHeader(name string) marshaler {
 func marshalString(tag tag) marshaler {
 	formSet := formSetter(tag)
 	return func(v reflect.Value, p *Params) error {
+		s := v.String()
+		if tag.omitempty && s == "" {
+			return nil
+		}
 		formSet(tag.name, v.String(), p)
 		return nil
 	}
@@ -282,7 +291,11 @@ func implementsTextMarshaler(t reflect.Type) bool {
 // using its MarshalText method.
 func marshalWithMarshalText(t reflect.Type, tag tag) marshaler {
 	formSet := formSetter(tag)
+	omit := omitter(t, tag)
 	return func(v reflect.Value, p *Params) error {
+		if omit(v) {
+			return nil
+		}
 		m := v.Addr().Interface().(encodingTextMarshaler)
 		data, err := m.MarshalText()
 		if err != nil {
@@ -293,11 +306,50 @@ func marshalWithMarshalText(t reflect.Type, tag tag) marshaler {
 	}
 }
 
+// IsZeroer is used when marshaling to determine if a value
+// is zero (see Marshal).
+type IsZeroer interface {
+	IsZero() bool
+}
+
+var isZeroerType = reflect.TypeOf((*IsZeroer)(nil)).Elem()
+
+// omitter returns a function that determins if a value
+// with the given type and tag should be omitted from
+// marshal output. The value passed to the function
+// will be the underlying value, not its address.
+//
+// It returns nil if the value should never be omitted.
+func omitter(t reflect.Type, tag tag) func(reflect.Value) bool {
+	never := func(reflect.Value) bool {
+		return false
+	}
+	if !tag.omitempty {
+		return never
+	}
+	if reflect.PtrTo(t).Implements(isZeroerType) {
+		return func(v reflect.Value) bool {
+			return v.Addr().Interface().(IsZeroer).IsZero()
+		}
+	}
+	if t.Comparable() {
+		zeroVal := reflect.Zero(t).Interface()
+		return func(v reflect.Value) bool {
+			return v.Interface() == zeroVal
+		}
+	}
+	return never
+}
+
 // marshalWithSprint returns an marshaler
 // that unmarshals the given tag using fmt.Sprint.
-func marshalWithSprint(tag tag) marshaler {
+func marshalWithSprint(t reflect.Type, tag tag) marshaler {
 	formSet := formSetter(tag)
+	omit := omitter(t, tag)
 	return func(v reflect.Value, p *Params) error {
+		if omit(v) {
+			return nil
+		}
 		formSet(tag.name, fmt.Sprint(v.Interface()), p)
 		return nil
 	}
