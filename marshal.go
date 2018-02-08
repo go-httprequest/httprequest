@@ -52,6 +52,11 @@ var emptyReader = bytes.NewReader(nil)
 // value for its type, otherwise the value will never be omitted.
 // One notable implementation of IsZeroer is time.Time.
 //
+// An "inbody" attribute on a form field specifies that the field will
+// be marshaled as part of an application/x-www-form-urlencoded body.
+// Note that the field may still be unmarshaled from either a URL query
+// parameter or a form-encoded body.
+//
 // For example, this code:
 //
 //	type UserDetails struct {
@@ -97,11 +102,25 @@ func Marshal(baseURL, method string, x interface{}) (*http.Request, error) {
 		return nil, errgo.Mask(err)
 	}
 	req.Form = url.Values{}
+	if pt.formBody {
+		// Use req.PostForm as a place to put the values that
+		// will be marshaled as part of the form body.
+		// It's ignored by http.Client, but that's OK because
+		// we'll make the body ourselves later.
+		req.PostForm = url.Values{}
+	}
 	p := &Params{
 		Request: req,
 	}
 	if err := marshal(p, xv, pt); err != nil {
 		return nil, errgo.Mask(err, errgo.Is(ErrUnmarshal))
+	}
+	if pt.formBody {
+		data := []byte(req.PostForm.Encode())
+		p.Request.Body = BytesReaderCloser{bytes.NewReader(data)}
+		p.Request.ContentLength = int64(len(data))
+		p.Request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		p.Request.PostForm = nil
 	}
 	if headerSetter, ok := x.(HeaderSetter); ok {
 		headerSetter.SetHeader(p.Request.Header)
@@ -193,7 +212,7 @@ func nextPathSegment(s string) (string, string) {
 }
 
 // getMarshaler returns a marshaler function suitable for marshaling
-// a field with the given tag into and http request.
+// a field with the given tag into an HTTP request.
 func getMarshaler(tag tag, t reflect.Type) (marshaler, error) {
 	switch {
 	case tag.source == sourceNone:
@@ -205,7 +224,9 @@ func getMarshaler(tag tag, t reflect.Type) (marshaler, error) {
 		default:
 			return nil, errgo.New("invalid target type []string for path parameter")
 		case sourceForm:
-			return marshalAllField(tag.name), nil
+			return marshalAllForm(tag.name), nil
+		case sourceFormBody:
+			return marshalAllFormBody(tag.name), nil
 		case sourceHeader:
 			return marshalAllHeader(tag.name), nil
 		}
@@ -236,11 +257,21 @@ func marshalBody(v reflect.Value, p *Params) error {
 	return nil
 }
 
-// marshalAllField marshals a []string slice into form fields.
-func marshalAllField(name string) marshaler {
+// marshalAllForm marshals a []string slice into form fields.
+func marshalAllForm(name string) marshaler {
 	return func(v reflect.Value, p *Params) error {
 		if ss := v.Interface().([]string); len(ss) > 0 {
 			p.Request.Form[name] = ss
+		}
+		return nil
+	}
+}
+
+// marshalAllFormBody marshals a []string slice into form body fields.
+func marshalAllFormBody(name string) marshaler {
+	return func(v reflect.Value, p *Params) error {
+		if ss := v.Interface().([]string); len(ss) > 0 {
+			p.Request.PostForm[name] = ss
 		}
 		return nil
 	}
@@ -377,6 +408,9 @@ func formSetter(t tag) func(name, value string, p *Params) {
 var formSetters = []func(string, string, *Params){
 	sourceForm: func(name, value string, p *Params) {
 		p.Request.Form.Set(name, value)
+	},
+	sourceFormBody: func(name, value string, p *Params) {
+		p.Request.PostForm.Set(name, value)
 	},
 	sourcePath: func(name, value string, p *Params) {
 		p.PathVar = append(p.PathVar, httprouter.Param{Key: name, Value: value})

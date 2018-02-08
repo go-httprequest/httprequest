@@ -64,9 +64,10 @@ type marshaler func(reflect.Value, *Params) error
 // requestType holds information derived from a request
 // type, preprocessed so that it's quick to marshal or unmarshal.
 type requestType struct {
-	method string
-	path   string
-	fields []field
+	method   string
+	path     string
+	formBody bool
+	fields   []field
 }
 
 // field holds preprocessed information on an individual field
@@ -158,11 +159,17 @@ func parseRequestType(t reflect.Type) (*requestType, error) {
 		if err != nil {
 			return nil, errgo.Notef(err, "bad tag %q in field %s", f.Tag, f.Name)
 		}
-		if tag.source == sourceBody {
+		switch tag.source {
+		case sourceFormBody:
+			pt.formBody = true
+		case sourceBody:
 			if hasBody {
 				return nil, errgo.New("more than one body field specified")
 			}
 			hasBody = true
+		}
+		if hasBody && pt.formBody {
+			return nil, errgo.New("cannot specify inbody field with a body field")
 		}
 		field := field{
 			index: f.Index,
@@ -265,6 +272,7 @@ const (
 	sourceNone = iota
 	sourcePath
 	sourceForm
+	sourceFormBody
 	sourceBody
 	sourceHeader
 )
@@ -289,12 +297,15 @@ func parseTag(rtag reflect.StructTag, fieldName string) (tag, error) {
 	if fields[0] != "" {
 		t.name = fields[0]
 	}
+	inBody := false
 	for _, f := range fields[1:] {
 		switch f {
 		case "path":
 			t.source = sourcePath
 		case "form":
 			t.source = sourceForm
+		case "inbody":
+			inBody = true
 		case "body":
 			t.source = sourceBody
 		case "header":
@@ -307,6 +318,12 @@ func parseTag(rtag reflect.StructTag, fieldName string) (tag, error) {
 	}
 	if t.omitempty && t.source != sourceForm && t.source != sourceHeader {
 		return tag{}, fmt.Errorf("can only use omitempty with form or header fields")
+	}
+	if inBody {
+		if t.source != sourceForm {
+			return tag{}, fmt.Errorf("can only use inbody with form field")
+		}
+		t.source = sourceFormBody
 	}
 	return t, nil
 }
