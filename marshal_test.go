@@ -171,6 +171,31 @@ var marshalTests = []struct {
 	},
 	expectURLString: "http://localhost:8081/user",
 }, {
+	about:     "form values in body",
+	urlString: "http://localhost:8081",
+	val: &struct {
+		F1 string   `httprequest:"f1,form,inbody"`
+		F2 []string `httprequest:"f2,form,inbody"`
+		F3 string   `httprequest:"f3,form"`
+	}{
+		F1: "f1",
+		F2: []string{"f2.1", "f2.2"},
+		F3: "f3",
+	},
+	expectURLString: "http://localhost:8081?f3=f3",
+	expectHeader: http.Header{
+		"Content-Type": {"application/x-www-form-urlencoded"},
+	},
+	expectBody: newString(`f1=f1&f2=f2.1&f2=f2.2`),
+}, {
+	about:     "form inbody values with explicit body",
+	urlString: "http://localhost:8081",
+	val: &struct {
+		F1 string `httprequest:"f1,form,inbody"`
+		F2 string `httprequest:"f3,body"`
+	}{},
+	expectError: `bad type .*: cannot specify inbody field with a body field`,
+}, {
 	about:     "cannot marshal []string field to path",
 	urlString: "http://localhost:8081/:users",
 	val: &struct {
@@ -480,7 +505,7 @@ func (*marshalSuite) TestMarshal(c *gc.C) {
 		if test.expectBody != nil {
 			data, err := ioutil.ReadAll(req.Body)
 			c.Assert(err, gc.IsNil)
-			if *test.expectBody != "" {
+			if *test.expectBody != "" && test.expectHeader["Content-Type"] == nil {
 				c.Assert(req.Header.Get("Content-Type"), gc.Equals, "application/json")
 			}
 			c.Assert(string(data), gc.DeepEquals, *test.expectBody)

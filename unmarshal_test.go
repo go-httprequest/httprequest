@@ -238,9 +238,13 @@ var unmarshalTests = []struct {
 		F exclamationUnmarshaler `httprequest:",form"`
 	}{},
 	params: httprequest.Params{
-		Request: &http.Request{},
+		Request: &http.Request{
+			Form: url.Values{
+				"F": {""},
+			},
+		},
 	},
-	expectError: "cannot unmarshal into field: empty string!",
+	expectError: "cannot unmarshal into field F: empty string!",
 }, {
 	about: "all field form values",
 	val: struct {
@@ -275,7 +279,7 @@ var unmarshalTests = []struct {
 			},
 		},
 	},
-	expectError: `cannot unmarshal into field: cannot parse "not an int" into int: expected integer`,
+	expectError: `cannot unmarshal into field A: cannot parse "not an int" into int: expected integer`,
 }, {
 	about: "scan field not present",
 	val: struct {
@@ -295,7 +299,7 @@ var unmarshalTests = []struct {
 			Body:   body("invalid JSON"),
 		},
 	},
-	expectError: "cannot unmarshal into field: cannot unmarshal request body: invalid character 'i' looking for beginning of value",
+	expectError: "cannot unmarshal into field A: cannot unmarshal request body: invalid character 'i' looking for beginning of value",
 }, {
 	about: "body with read error",
 	val: struct {
@@ -307,7 +311,7 @@ var unmarshalTests = []struct {
 			Body:   errorReader("some error"),
 		},
 	},
-	expectError: "cannot unmarshal into field: cannot read request body: some error",
+	expectError: "cannot unmarshal into field A: cannot read request body: some error",
 }, {
 	about: "[]string not allowed for URL source",
 	val: struct {
@@ -355,21 +359,24 @@ var unmarshalTests = []struct {
 			Body:   body("invalid JSON"),
 		},
 	},
-	expectError: `cannot unmarshal into field: unexpected content type text/html; want application/json; content: invalid JSON`,
+	expectError: `cannot unmarshal into field A: unexpected content type text/html; want application/json; content: invalid JSON`,
 }, {
 	about: "struct with header fields",
 	val: struct {
-		F1 int    `httprequest:"x1,header"`
-		G1 string `httprequest:"g1,header"`
+		A int      `httprequest:"a,header"`
+		B string   `httprequest:"b,header"`
+		C []string `httprequest:"c,header"`
 	}{
-		F1: 99,
-		G1: "g1 val",
+		A: 99,
+		B: "b val",
+		C: []string{"c val1", "c val2"},
 	},
 	params: httprequest.Params{
 		Request: &http.Request{
 			Header: http.Header{
-				"x1": {"99"},
-				"g1": {"g1 val"},
+				"a": {"99"},
+				"b": {"b val"},
+				"c": {"c val1", "c val2"},
 			},
 		},
 	},
@@ -444,7 +451,7 @@ type sFG struct {
 }
 
 func (*unmarshalSuite) TestUnmarshal(c *gc.C) {
-	for i, test := range unmarshalTests[len(unmarshalTests)-1:] {
+	for i, test := range unmarshalTests {
 		c.Logf("%d: %s", i, test.about)
 		t := reflect.TypeOf(test.val)
 		fillv := reflect.New(t)

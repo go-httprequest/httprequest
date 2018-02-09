@@ -91,8 +91,8 @@ func getUnmarshaler(tag tag, t reflect.Type) (unmarshaler, error) {
 		switch tag.source {
 		default:
 			return nil, errgo.New("invalid target type []string for path parameter")
-		case sourceForm:
-			return unmarshalAllField(tag.name), nil
+		case sourceForm, sourceFormBody:
+			return unmarshalAllForm(tag.name), nil
 		case sourceHeader:
 			return unmarshalAllHeader(tag.name), nil
 		}
@@ -113,9 +113,9 @@ func unmarshalNop(v reflect.Value, p Params, makeResult resultMaker) error {
 	return nil
 }
 
-// unmarshalAllField unmarshals all the form fields for a given
+// unmarshalAllForm unmarshals all the form fields for a given
 // attribute into a []string slice.
-func unmarshalAllField(name string) unmarshaler {
+func unmarshalAllForm(name string) unmarshaler {
 	return func(v reflect.Value, p Params, makeResult resultMaker) error {
 		vals := p.Request.Form[name]
 		if len(vals) > 0 {
@@ -176,13 +176,8 @@ func unmarshalBody(v reflect.Value, p Params, makeResult resultMaker) error {
 // returns the value for a given key and reports
 // whether the value was found.
 var formGetters = []func(name string, p Params) (string, bool){
-	sourceForm: func(name string, p Params) (string, bool) {
-		vs := p.Request.Form[name]
-		if len(vs) == 0 {
-			return "", false
-		}
-		return vs[0], true
-	},
+	sourceForm:     getFromForm,
+	sourceFormBody: getFromForm,
 	sourcePath: func(name string, p Params) (string, bool) {
 		for _, pv := range p.PathVar {
 			if pv.Key == name {
@@ -199,6 +194,14 @@ var formGetters = []func(name string, p Params) (string, bool){
 		}
 		return vs[0], true
 	},
+}
+
+func getFromForm(name string, p Params) (string, bool) {
+	vs := p.Request.Form[name]
+	if len(vs) == 0 {
+		return "", false
+	}
+	return vs[0], true
 }
 
 // encodingTextUnmarshaler is the same as encoding.TextUnmarshaler
