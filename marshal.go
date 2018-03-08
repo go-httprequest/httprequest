@@ -16,8 +16,6 @@ import (
 	"gopkg.in/errgo.v1"
 )
 
-var emptyReader = bytes.NewReader(nil)
-
 // Marshal is the counterpart of Unmarshal. It takes information from
 // x, which must be a pointer to a struct, and returns an HTTP request
 // using the given method that holds all of the information.
@@ -97,7 +95,7 @@ func Marshal(baseURL, method string, x interface{}) (*http.Request, error) {
 	if err != nil {
 		return nil, errgo.WithCausef(err, ErrBadUnmarshalType, "bad type %s", xv.Type())
 	}
-	req, err := http.NewRequest(method, baseURL, BytesReaderCloser{emptyReader})
+	req, err := http.NewRequest(method, baseURL, BytesReaderCloser{bytes.NewReader(nil)})
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
