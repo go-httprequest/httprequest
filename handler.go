@@ -27,8 +27,15 @@ type Server struct {
 	// If the returned errorBody implements HeaderSetter, then
 	// that method will be called to add custom headers to the request.
 	//
-	// If this is nil, DefaultErrorMapper will be used.
+	// If this both this and ErrorWriter are nil, DefaultErrorMapper will be used.
 	ErrorMapper func(ctxt context.Context, err error) (httpStatus int, errorBody interface{})
+
+	// ErrorWriter is a more general form of ErrorMapper. If this
+	// field is set, ErrorMapper will be ignored and any returned
+	// errors will be passed to ErrorWriter, which should use
+	// w to set the HTTP status and write an appropriate
+	// error response.
+	ErrorWriter func(ctx context.Context, w http.ResponseWriter, err error)
 }
 
 // Handler defines a HTTP handler that will handle the
@@ -519,6 +526,10 @@ func (srv *Server) HandleErrors(handle ErrorHandler) httprouter.Handle {
 // ErrorMapper so it is possible to add custom headers to the HTTP error
 // response by implementing HeaderSetter.
 func (srv *Server) WriteError(ctx context.Context, w http.ResponseWriter, err error) {
+	if srv.ErrorWriter != nil {
+		srv.ErrorWriter(ctx, w, err)
+		return
+	}
 	errorMapper := srv.ErrorMapper
 	if errorMapper == nil {
 		errorMapper = DefaultErrorMapper
