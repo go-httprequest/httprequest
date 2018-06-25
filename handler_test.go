@@ -6,6 +6,7 @@ package httprequest_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -1098,6 +1099,33 @@ var writeErrorTests = []struct {
 		},
 		nil,
 	),
+}, {
+	about: "error writer",
+	err:   errBadReq,
+	srv: httprequest.Server{
+		ErrorWriter: func(ctx context.Context, w http.ResponseWriter, err error) {
+			fmt.Fprintf(w, "custom error")
+		},
+	},
+	assertResponse: func(c *gc.C, rec *httptest.ResponseRecorder) {
+		c.Assert(rec.Body.String(), gc.Equals, "custom error")
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	},
+}, {
+	about: "error writer overrides error mapper",
+	err:   errBadReq,
+	srv: httprequest.Server{
+		ErrorWriter: func(ctx context.Context, w http.ResponseWriter, err error) {
+			fmt.Fprintf(w, "custom error")
+		},
+		ErrorMapper: func(_ context.Context, err error) (int, interface{}) {
+			return http.StatusInternalServerError, nil
+		},
+	},
+	assertResponse: func(c *gc.C, rec *httptest.ResponseRecorder) {
+		c.Assert(rec.Body.String(), gc.Equals, "custom error")
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	},
 }}
 
 func (s *handlerSuite) TestErrorfWithEmptyMessage(c *gc.C) {
