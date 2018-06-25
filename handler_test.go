@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
@@ -23,6 +24,10 @@ import (
 type handlerSuite struct{}
 
 var _ = gc.Suite(&handlerSuite{})
+
+type customError struct {
+	httprequest.RemoteError
+}
 
 var handleTests = []struct {
 	about        string
@@ -632,11 +637,9 @@ func (*handlerSuite) TestHandlersRootFuncWithIncompatibleRequestArg(c *gc.C) {
 	handleVal := testHandlers{
 		c: c,
 	}
-	var gotArg interface{}
 	f := func(p httprequest.Params, arg interface {
 		Foo()
 	}) (*testHandlers, context.Context, error) {
-		gotArg = arg
 		return &handleVal, p.Context, nil
 	}
 	c.Assert(func() {
@@ -956,69 +959,162 @@ func testErrorMapper(_ context.Context, err error) (int, interface{}) {
 }
 
 var writeErrorTests = []struct {
-	err          error
-	expectStatus int
-	expectResp   *httprequest.RemoteError
-	expectHeader http.Header
+	about          string
+	err            error
+	srv            httprequest.Server
+	assertResponse func(c *gc.C, rec *httptest.ResponseRecorder)
+	expectStatus   int
+	expectResp     *httprequest.RemoteError
+	expectHeader   http.Header
 }{{
-	err:          errUnauth,
-	expectStatus: http.StatusUnauthorized,
-	expectResp: &httprequest.RemoteError{
-		Message: errUnauth.Error(),
-		Code:    "unauthorized",
-	},
+	about: "unauthorized error",
+	err:   errUnauth,
+	srv:   testServer,
+	assertResponse: assertErrorResponse(
+		http.StatusUnauthorized,
+		&httprequest.RemoteError{
+			Message: errUnauth.Error(),
+			Code:    "unauthorized",
+		},
+		nil,
+	),
 }, {
-	err:          errBadReq,
-	expectStatus: http.StatusBadRequest,
-	expectResp: &httprequest.RemoteError{
-		Message: errBadReq.Error(),
-		Code:    "bad request",
-	},
+	about: "bad request error",
+	err:   errBadReq,
+	srv:   testServer,
+	assertResponse: assertErrorResponse(
+		http.StatusBadRequest,
+		&httprequest.RemoteError{
+			Message: errBadReq.Error(),
+			Code:    "bad request",
+		},
+		nil,
+	),
 }, {
-	err:          errOther,
-	expectStatus: http.StatusInternalServerError,
-	expectResp: &httprequest.RemoteError{
-		Message: errOther.Error(),
-	},
+	about: "unclassified error",
+	err:   errOther,
+	srv:   testServer,
+	assertResponse: assertErrorResponse(
+		http.StatusInternalServerError,
+		&httprequest.RemoteError{
+			Message: errOther.Error(),
+		},
+		nil,
+	),
 }, {
-	err:          errNil,
-	expectStatus: http.StatusInternalServerError,
+	about: "nil body",
+	err:   errNil,
+	srv:   testServer,
+	assertResponse: assertErrorResponse(
+		http.StatusInternalServerError,
+		(*httprequest.RemoteError)(nil),
+		nil,
+	),
 }, {
-	err:          errCustomHeaders,
-	expectStatus: http.StatusNotAcceptable,
-	expectResp: &httprequest.RemoteError{
-		Message: errCustomHeaders.Error(),
-	},
-	expectHeader: http.Header{
-		"Acceptability": {"not at all"},
-	},
+	about: "custom headers",
+	err:   errCustomHeaders,
+	srv:   testServer,
+	assertResponse: assertErrorResponse(
+		http.StatusNotAcceptable,
+		&httprequest.RemoteError{
+			Message: errCustomHeaders.Error(),
+		},
+		http.Header{
+			"Acceptability": {"not at all"},
+		},
+	),
 }, {
-	err:          errUnmarshalableError,
-	expectStatus: http.StatusInternalServerError,
-	expectResp: &httprequest.RemoteError{
-		Message: `cannot marshal error response "unmarshalable error": json: unsupported type: chan int`,
+	about: "unmarshalable error",
+	err:   errUnmarshalableError,
+	srv:   testServer,
+	assertResponse: assertErrorResponse(
+		http.StatusInternalServerError,
+		&httprequest.RemoteError{
+			Message: `cannot marshal error response "unmarshalable error": json: unsupported type: chan int`,
+		},
+		nil,
+	),
+}, {
+	about: "error with default error mapper",
+	err:   errgo.Newf("some error"),
+	srv:   httprequest.Server{},
+	assertResponse: assertErrorResponse(
+		http.StatusInternalServerError,
+		&httprequest.RemoteError{
+			Message: "some error",
+		},
+		nil,
+	),
+}, {
+	about: "default error mapper with specific error code",
+	err:   httprequest.Errorf(httprequest.CodeBadRequest, "some bad request %d", 99),
+	srv:   httprequest.Server{},
+	assertResponse: assertErrorResponse(
+		http.StatusBadRequest,
+		&httprequest.RemoteError{
+			Message: "some bad request 99",
+			Code:    httprequest.CodeBadRequest,
+		},
+		nil,
+	),
+}, {
+	about: "edefault error mapper with specific error code with wrapped error",
+	err:   errgo.NoteMask(httprequest.Errorf(httprequest.CodeBadRequest, "some bad request %d", 99), "wrap", errgo.Any),
+	srv:   httprequest.Server{},
+	assertResponse: assertErrorResponse(
+		http.StatusBadRequest,
+		&httprequest.RemoteError{
+			Message: "wrap: some bad request 99",
+			Code:    httprequest.CodeBadRequest,
+		},
+		nil,
+	),
+}, {
+	about: "default error mapper with specific error code with wrapped error",
+	err:   errgo.NoteMask(httprequest.Errorf(httprequest.CodeBadRequest, "some bad request %d", 99), "wrap", errgo.Any),
+	srv:   httprequest.Server{},
+	assertResponse: assertErrorResponse(
+		http.StatusBadRequest,
+		&httprequest.RemoteError{
+			Message: "wrap: some bad request 99",
+			Code:    httprequest.CodeBadRequest,
+		},
+		nil,
+	),
+}, {
+	about: "default error mapper with custom error with ErrorCode implementation",
+	err: &customError{
+		RemoteError: httprequest.RemoteError{
+			Code:    httprequest.CodeNotFound,
+			Message: "bar",
+		},
 	},
+	srv: httprequest.Server{},
+	assertResponse: assertErrorResponse(
+		http.StatusNotFound,
+		&httprequest.RemoteError{
+			Message: "bar",
+			Code:    httprequest.CodeNotFound,
+		},
+		nil,
+	),
 }}
+
+func (s *handlerSuite) TestErrorfWithEmptyMessage(c *gc.C) {
+	err := httprequest.Errorf(httprequest.CodeNotFound, "")
+	c.Assert(err, jc.DeepEquals, &httprequest.RemoteError{
+		Message: httprequest.CodeNotFound,
+		Code:    httprequest.CodeNotFound,
+	})
+}
 
 func (s *handlerSuite) TestWriteError(c *gc.C) {
 	for i, test := range writeErrorTests {
 		c.Logf("%d: %s", i, test.err)
 		rec := httptest.NewRecorder()
-		testServer.WriteError(context.TODO(), rec, test.err)
-		resp := parseErrorResponse(c, rec.Body.Bytes())
-		c.Assert(resp, gc.DeepEquals, test.expectResp)
-		c.Assert(rec.Code, gc.Equals, test.expectStatus)
-		for name, vals := range test.expectHeader {
-			c.Assert(rec.HeaderMap[name], jc.DeepEquals, vals)
-		}
+		test.srv.WriteError(context.TODO(), rec, test.err)
+		test.assertResponse(c, rec)
 	}
-}
-
-func parseErrorResponse(c *gc.C, body []byte) *httprequest.RemoteError {
-	var errResp *httprequest.RemoteError
-	err := json.Unmarshal(body, &errResp)
-	c.Assert(err, gc.IsNil)
-	return errResp
 }
 
 func (s *handlerSuite) TestHandleErrors(c *gc.C) {
@@ -1162,4 +1258,24 @@ func (r *x1Request) Test() string {
 
 func (h *handlersWithRequestMethod) X1(arg *x1Request) (string, error) {
 	return arg.P, nil
+}
+
+func assertErrorResponse(code int, body interface{}, header http.Header) func(c *gc.C, rec *httptest.ResponseRecorder) {
+	return func(c *gc.C, rec *httptest.ResponseRecorder) {
+		resp := reflect.New(reflect.ValueOf(body).Type())
+		err := json.Unmarshal(rec.Body.Bytes(), resp.Interface())
+		c.Assert(err, gc.IsNil)
+		c.Assert(resp.Elem().Interface(), gc.DeepEquals, body)
+		c.Assert(rec.Code, gc.Equals, code)
+		for name, vals := range header {
+			c.Assert(rec.HeaderMap[name], jc.DeepEquals, vals)
+		}
+	}
+}
+
+func parseErrorResponse(c *gc.C, body []byte) *httprequest.RemoteError {
+	var errResp *httprequest.RemoteError
+	err := json.Unmarshal(body, &errResp)
+	c.Assert(err, gc.IsNil)
+	return errResp
 }

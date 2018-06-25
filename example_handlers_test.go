@@ -36,7 +36,8 @@ func ExampleServer_Handlers() {
 		return arithHandler{}, p.Context, nil
 	}
 	router := httprouter.New()
-	for _, h := range exampleServer.Handlers(f) {
+	var reqSrv httprequest.Server
+	for _, h := range reqSrv.Handlers(f) {
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
 	srv := httptest.NewServer(router)
@@ -53,16 +54,4 @@ func ExampleServer_Handlers() {
 	// Output: handle GET /123/add/11
 	// result:
 	// {"N":134}
-}
-
-type exampleErrorResponse struct {
-	Message string
-}
-
-var exampleServer = httprequest.Server{
-	ErrorMapper: func(ctx context.Context, err error) (int, interface{}) {
-		return http.StatusInternalServerError, &exampleErrorResponse{
-			Message: err.Error(),
-		}
-	},
 }
