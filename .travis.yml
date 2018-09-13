@@ -1,7 +1,7 @@
 language: go
 go_import_path: "gopkg.in/httprequest.v1"
 go: 
-  - "1.6"
+  - "1.7"
   - "1.10"
 before_install:
   - "go get github.com/rogpeppe/godeps"

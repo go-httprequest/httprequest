@@ -1,3 +1,4 @@
+github.com/gabriel-samfira/sys	git	9ddc60d56b511544223adecea68da1e4f2153beb	2015-06-08T13:21:19Z
 github.com/juju/ansiterm	git	b99631de12cf04a906c1d4e4ec54fb86eae5863d	2016-09-07T23:45:32Z
 github.com/juju/errors	git	1b5e39b83d1835fa480e0c2ddefb040ee82d58b3	2015-09-16T12:56:42Z
 github.com/juju/loggo	git	3b7ece48644d35850f4ced4c2cbc2cf8413f58e0	2016-08-18T02:57:24Z
@@ -9,10 +10,10 @@ github.com/julienschmidt/httprouter	git	77a895ad01ebc98a4dc95d8355bc825ce80a56f6
 github.com/lunixbochs/vtclean	git	4fbf7632a2c6d3fbdb9931439bdbbeded02cbe36	2016-01-25T03:51:06Z
 github.com/mattn/go-colorable	git	ed8eb9e318d7a84ce5915b495b7d35e0cfe7b5a8	2016-07-31T23:54:17Z
 github.com/mattn/go-isatty	git	66b8e73f3f5cda9f96b69efd03dd3d7fc4a5cdb8	2016-08-06T12:27:52Z
-github.com/rogpeppe/fastuuid	git	6724a57986aff9bff1a1770e9347036def7c89f6	2015-01-06T09:32:20Z
 golang.org/x/crypto	git	8e06e8ddd9629eb88639aba897641bff8031f1d3	2016-09-22T17:06:29Z
 golang.org/x/net	git	ea47fc708ee3e20177f3ca3716217c4ab75942cb	2015-08-29T23:03:18Z
-golang.org/x/tools	git	1f1b3322f67af76803c942fd237291538ec68262	2016-04-27T05:26:01Z
+golang.org/x/sys	git	d0be0721c37eeb5299f245a996a483160fc36940	2018-09-09T12:40:46Z
+golang.org/x/tools	git	677d2ff680c188ddb7dcd2bfa6bc7d3f2f2f75b2	2018-09-11T13:30:44Z
 gopkg.in/check.v1	git	4f90aeace3a26ad7021961c297b22c42160c7b25	2016-01-05T16:49:36Z
 gopkg.in/errgo.v1	git	66cb46252b94c1f3d65646f54ee8043ab38d766c	2015-10-07T15:31:57Z
 gopkg.in/mgo.v2	git	f2b6f6c918c452ad107eec89615f074e3bd80e33	2016-08-18T01:52:18Z
