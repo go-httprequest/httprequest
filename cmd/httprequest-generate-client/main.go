@@ -1,4 +1,4 @@
-// +build go1.6
+// +build go1.8
 
 package main
 
@@ -142,9 +142,9 @@ type method struct {
 // The localPkg package will be the one that the code will be generated in.
 func serverMethods(serverPkg, serverType, localPkg string) ([]method, []string, error) {
 	cfg := packages.Config{
-		Mode: packages.LoadSyntax,
-		ParseFile: func(fset *token.FileSet, filename string) (*ast.File, error) {
-			return parser.ParseFile(fset, filename, nil, parser.ParseComments)
+		Mode: packages.LoadAllSyntax,
+		ParseFile: func(fset *token.FileSet, filename string, src []byte) (*ast.File, error) {
+			return parser.ParseFile(fset, filename, src, parser.ParseComments)
 		},
 	}
 	pkgs, err := packages.Load(&cfg, serverPkg)
@@ -214,21 +214,31 @@ func docComment(pkg *packages.Package, sel *types.Selection) string {
 		panic("no file found for method")
 	}
 	filename := tokFile.Name()
-	for _, f := range pkg.Syntax {
-		if tokFile := pkg.Fset.File(f.Pos()); tokFile == nil || tokFile.Name() != filename {
-			continue
-		}
-		// We've found the file we're looking for. Now traverse all
-		// top level declarations looking for the right function declaration.
-		for _, decl := range f.Decls {
-			fdecl, ok := decl.(*ast.FuncDecl)
-			if ok && fdecl.Name.Pos() == obj.Pos() {
-				// Found it!
-				return commentStr(fdecl.Doc)
+	comment := ""
+	declFound := false
+	packages.Visit([]*packages.Package{pkg}, func(pkg *packages.Package) bool {
+		for _, f := range pkg.Syntax {
+			if tokFile := pkg.Fset.File(f.Pos()); tokFile == nil || tokFile.Name() != filename {
+				continue
+			}
+			// We've found the file we're looking for. Now traverse all
+			// top level declarations looking for the right function declaration.
+			for _, decl := range f.Decls {
+				fdecl, ok := decl.(*ast.FuncDecl)
+				if ok && fdecl.Name.Pos() == obj.Pos() {
+					// Found it!
+					comment = commentStr(fdecl.Doc)
+					declFound = true
+					return false
+				}
 			}
 		}
+		return true
+	}, nil)
+	if !declFound {
+		panic(fmt.Sprintf("method declaration not found"))
 	}
-	panic("method declaration not found")
+	return comment
 }
 
 func commentStr(c *ast.CommentGroup) string {

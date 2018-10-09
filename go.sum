@@ -28,14 +28,12 @@ golang.org/x/net v0.0.0-20150829230318-ea47fc708ee3 h1:vQKsY7JYxkBiIr0dkSCjLB4p7
 golang.org/x/net v0.0.0-20150829230318-ea47fc708ee3/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e h1:o3PsSEY8E4eXWkXrIP9YJALUkVZqzHJT5DOasTyn8Vs=
 golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
-golang.org/x/tools v0.0.0-20180911133044-677d2ff680c1 h1:dzEuQYa6+a3gROnSlgly5ERUm4SZKJt+dh+4iSbO+bI=
-golang.org/x/tools v0.0.0-20180911133044-677d2ff680c1/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+golang.org/x/tools v0.0.0-20181008205924-a2b3f7f249e9 h1:T3nuFyXXDj5KXX9CqQm/r/YEL4Gua01s/ZEdfdLyJ2c=
+golang.org/x/tools v0.0.0-20181008205924-a2b3f7f249e9/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
 gopkg.in/check.v1 v1.0.0-20160105164936-4f90aeace3a2 h1:+j1SppRob9bAgoYmsdW9NNBdKZfgYuWpqnYHv78Qt8w=
 gopkg.in/check.v1 v1.0.0-20160105164936-4f90aeace3a2/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/errgo.v1 v1.0.0-20151007153157-66cb46252b94 h1:ZA1f6ozm5hD4K7/ALu4EdbSoAsBMm8M/nMP9eoow3IY=
 gopkg.in/errgo.v1 v1.0.0-20151007153157-66cb46252b94/go.mod h1:u0ALmqvLRxLI95fkdCEWrE6mhWYZW1aMOJHp5YXLHTg=
-gopkg.in/httprequest.v1 v1.1.2 h1:dxQgu0dVQ81s7iAUTYkT7xzxM3y9RkwVgN//UVjYruc=
-gopkg.in/httprequest.v1 v1.1.2/go.mod h1:/CkavNL+g3qLOrpFHVrEx4NKepeqR4XTZWNj4sGGjz0=
 gopkg.in/juju/names.v2 v2.0.0-20180621093930-fd59336b4621 h1:7IcAZvbCvk9R2jC+M0eA8RFKsYEYOvRejWLhUnKGWHU=
 gopkg.in/juju/names.v2 v2.0.0-20180621093930-fd59336b4621/go.mod h1:XXa/v5qG1IsStRg5KTE8JkDMndoDMOKH1YYw0jSUWaM=
 gopkg.in/mgo.v2 v2.0.0-20160818015218-f2b6f6c918c4 h1:hILp2hNrRnYjZpmIbx70psAHbBSEcQ1NIzDcUbJ1b6g=
