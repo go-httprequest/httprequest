@@ -16,7 +16,7 @@ require (
 	golang.org/x/crypto v0.0.0-20160922170629-8e06e8ddd962 // indirect
 	golang.org/x/net v0.0.0-20150829230318-ea47fc708ee3
 	golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e // indirect
-	golang.org/x/tools v0.0.0-20180911133044-677d2ff680c1
+	golang.org/x/tools v0.0.0-20181008205924-a2b3f7f249e9
 	gopkg.in/check.v1 v1.0.0-20160105164936-4f90aeace3a2
 	gopkg.in/errgo.v1 v1.0.0-20151007153157-66cb46252b94
 	gopkg.in/juju/names.v2 v2.0.0-20180621093930-fd59336b4621 // indirect
