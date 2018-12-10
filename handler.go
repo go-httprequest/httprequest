@@ -197,6 +197,13 @@ func (srv *Server) Handlers(f interface{}) []Handler {
 			}
 			continue
 		}
+		if wt.Kind() != reflect.Interface {
+			// The type in the Method struct includes the receiver type,
+			// which we don't want to look at (and we won't see when
+			// we get the method from the actual value at dispatch time),
+			// so we hide it.
+			m.Type = withoutReceiver(m.Type)
+		}
 		h, err := srv.methodHandler(m, rootv, argInterfacet, hasClose)
 		if err != nil {
 			panic(err)
@@ -210,12 +217,7 @@ func (srv *Server) Handlers(f interface{}) []Handler {
 }
 
 func (srv *Server) methodHandler(m reflect.Method, rootv reflect.Value, argInterfacet reflect.Type, hasClose bool) (Handler, error) {
-	// The type in the Method struct includes the receiver type,
-	// which we don't want to look at (and we won't see when
-	// we get the method from the actual value at dispatch time),
-	// so we hide it.
-	mt := withoutReceiver(m.Type)
-	hf, err := srv.handlerFunc(mt, argInterfacet)
+	hf, err := srv.handlerFunc(m.Type, argInterfacet)
 	if err != nil {
 		return Handler{}, errgo.Notef(err, "bad type for method %s", m.Name)
 	}

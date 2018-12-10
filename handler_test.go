@@ -634,6 +634,27 @@ func (*handlerSuite) TestHandlersRootFuncWithRequestArg(c *gc.C) {
 	})
 }
 
+func (*handlerSuite) TestHandlersRootFuncReturningInterface(c *gc.C) {
+	handleVal := testHandlers{
+		c: c,
+	}
+	type testHandlersI interface {
+		M2(arg *m2Request) (int, error)
+	}
+	f := func(p httprequest.Params) (testHandlersI, context.Context, error) {
+		return &handleVal, p.Context, nil
+	}
+	router := httprouter.New()
+	for _, h := range testServer.Handlers(f) {
+		router.Handle(h.Method, h.Path, h.Handle)
+	}
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:    router,
+		URL:        "/m2/99",
+		ExpectBody: 999,
+	})
+}
+
 func (*handlerSuite) TestHandlersRootFuncWithIncompatibleRequestArg(c *gc.C) {
 	handleVal := testHandlers{
 		c: c,
