@@ -2,13 +2,10 @@ package httprequest
 
 import (
 	"strings"
+	"testing"
 
-	gc "gopkg.in/check.v1"
+	qt "github.com/frankban/quicktest"
 )
-
-type checkIsJSONSuite struct{}
-
-var _ = gc.Suite(&checkIsJSONSuite{})
 
 var fancyDecodeErrorTests = []struct {
 	about       string
@@ -420,16 +417,20 @@ YUI().use('storefront-cookie', 'storefront-utils', 'user-dropdown',
 </body>
 </html>
 `,
-	expectError: `unexpected content type text/html; want application/json; content: Page not found | Juju; Jump to content; Store; Demo; About; Features; Community; Docs; Get started; ☰; Create; \+; 404: Sorry, we couldn’t find the page; Try a different URL, try searching for solutions or learn how to; create your own solution; Browse the store; All bundles; All charms; Submit a bug; Browse the store ›; Back to the top; Demo; About; Features; Docs; Get Started; Juju on Google+; Ubuntu Cloud on Twitter; Ubuntu Cloud on Facebook; © 2015 Canonical Ltd. Ubuntu and Canonical are registered trademarks of Canonical Ltd; Legal information; Report a bug on this site; Got to the top of the page`,
+	expectError: `unexpected content type text/html; want application/json; content: Page not found \| Juju; Jump to content; Store; Demo; About; Features; Community; Docs; Get started; ☰; Create; \+; 404: Sorry, we couldn’t find the page; Try a different URL, try searching for solutions or learn how to; create your own solution; Browse the store; All bundles; All charms; Submit a bug; Browse the store ›; Back to the top; Demo; About; Features; Docs; Get Started; Juju on Google\+; Ubuntu Cloud on Twitter; Ubuntu Cloud on Facebook; © 2015 Canonical Ltd. Ubuntu and Canonical are registered trademarks of Canonical Ltd; Legal information; Report a bug on this site; Got to the top of the page`,
 }}
 
-func (checkIsJSONSuite) TestFancyDecodeError(c *gc.C) {
-	for i, test := range fancyDecodeErrorTests {
-		c.Logf("test %d: %s", i, test.about)
-		err := &fancyDecodeError{
-			contentType: test.contentType,
-			body:        []byte(test.body),
-		}
-		c.Assert(err, gc.ErrorMatches, test.expectError)
+func TestFancyDecodeError(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range fancyDecodeErrorTests {
+		test := test
+		c.Run(test.about, func(c *qt.C) {
+			err := &fancyDecodeError{
+				contentType: test.contentType,
+				body:        []byte(test.body),
+			}
+			c.Assert(err, qt.ErrorMatches, test.expectError)
+		})
 	}
 }

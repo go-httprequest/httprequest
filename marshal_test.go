@@ -7,17 +7,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"testing"
 	"time"
 
-	gc "gopkg.in/check.v1"
+	qt "github.com/frankban/quicktest"
 	"gopkg.in/errgo.v1"
 
 	"gopkg.in/httprequest.v1"
 )
-
-type marshalSuite struct{}
-
-var _ = gc.Suite(&marshalSuite{})
 
 type embedded struct {
 	F1 string  `json:"name"`
@@ -486,33 +483,37 @@ func getStruct() interface{} {
 	}
 }
 
-func (*marshalSuite) TestMarshal(c *gc.C) {
-	for i, test := range marshalTests {
-		c.Logf("%d: %s", i, test.about)
-		method := "GET"
-		if test.method != "" {
-			method = test.method
-		}
-		req, err := httprequest.Marshal(test.urlString, method, test.val)
-		if test.expectError != "" {
-			c.Assert(err, gc.ErrorMatches, test.expectError)
-			continue
-		}
-		c.Assert(err, gc.IsNil)
-		if test.expectURLString != "" {
-			c.Assert(req.URL.String(), gc.DeepEquals, test.expectURLString)
-		}
-		if test.expectBody != nil {
-			data, err := ioutil.ReadAll(req.Body)
-			c.Assert(err, gc.IsNil)
-			if *test.expectBody != "" && test.expectHeader["Content-Type"] == nil {
-				c.Assert(req.Header.Get("Content-Type"), gc.Equals, "application/json")
+func TestMarshal(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range marshalTests {
+		test := test
+		c.Run(test.about, func(c *qt.C) {
+			method := "GET"
+			if test.method != "" {
+				method = test.method
 			}
-			c.Assert(string(data), gc.DeepEquals, *test.expectBody)
-		}
-		for k, v := range test.expectHeader {
-			c.Assert(req.Header[k], gc.DeepEquals, v, gc.Commentf("key %q", k))
-		}
+			req, err := httprequest.Marshal(test.urlString, method, test.val)
+			if test.expectError != "" {
+				c.Assert(err, qt.ErrorMatches, test.expectError)
+				return
+			}
+			c.Assert(err, qt.Equals, nil)
+			if test.expectURLString != "" {
+				c.Assert(req.URL.String(), qt.Equals, test.expectURLString)
+			}
+			if test.expectBody != nil {
+				data, err := ioutil.ReadAll(req.Body)
+				c.Assert(err, qt.Equals, nil)
+				if *test.expectBody != "" && test.expectHeader["Content-Type"] == nil {
+					c.Assert(req.Header.Get("Content-Type"), qt.Equals, "application/json")
+				}
+				c.Assert(string(data), qt.Equals, *test.expectBody)
+			}
+			for k, v := range test.expectHeader {
+				c.Assert(req.Header[k], qt.DeepEquals, v, qt.Commentf("key %q", k))
+			}
+		})
 	}
 }
 

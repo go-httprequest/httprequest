@@ -5,14 +5,11 @@ package httprequest
 
 import (
 	"reflect"
+	"testing"
 
-	jc "github.com/juju/testing/checkers"
-	gc "gopkg.in/check.v1"
+	qt "github.com/frankban/quicktest"
+	"github.com/google/go-cmp/cmp/cmpopts"
 )
-
-type fieldsSuite struct{}
-
-var _ = gc.Suite(&fieldsSuite{})
 
 type structField struct {
 	name  string
@@ -233,31 +230,35 @@ type sFG struct {
 
 type M map[string]interface{}
 
-func (*fieldsSuite) TestFields(c *gc.C) {
-	for i, test := range fieldsTests {
-		c.Logf("%d: %s", i, test.about)
-		t := reflect.TypeOf(test.val)
-		got := fields(t)
-		c.Assert(got, gc.HasLen, len(test.expect))
-		for j, field := range got {
-			expect := test.expect[j]
-			c.Logf("field %d: %s", j, expect.name)
-			gotField := t.FieldByIndex(field.Index)
-			// Unfortunately, FieldByIndex does not return
-			// a field with the same index that we passed in,
-			// so we set it to the expected value so that
-			// it can be compared later with the result of FieldByName.
-			gotField.Index = field.Index
-			expectField := t.FieldByIndex(expect.index)
-			// ditto.
-			expectField.Index = expect.index
-			c.Assert(gotField, jc.DeepEquals, expectField)
+func TestFields(t *testing.T) {
+	c := qt.New(t)
 
-			// Sanity check that we can actually access the field by the
-			// expected name.
-			expectField1, ok := t.FieldByName(expect.name)
-			c.Assert(ok, jc.IsTrue)
-			c.Assert(expectField1, jc.DeepEquals, expectField)
-		}
+	for _, test := range fieldsTests {
+		test := test
+		c.Run(test.about, func(c *qt.C) {
+			t := reflect.TypeOf(test.val)
+			got := fields(t)
+			c.Assert(got, qt.HasLen, len(test.expect))
+			for j, field := range got {
+				expect := test.expect[j]
+				c.Logf("field %d: %s", j, expect.name)
+				gotField := t.FieldByIndex(field.Index)
+				// Unfortunately, FieldByIndex does not return
+				// a field with the same index that we passed in,
+				// so we set it to the expected value so that
+				// it can be compared later with the result of FieldByName.
+				gotField.Index = field.Index
+				expectField := t.FieldByIndex(expect.index)
+				// ditto.
+				expectField.Index = expect.index
+				c.Assert(gotField, qt.CmpEquals(cmpopts.IgnoreInterfaces(struct{ reflect.Type }{})), expectField)
+
+				// Sanity check that we can actually access the field by the
+				// expected name.
+				expectField1, ok := t.FieldByName(expect.name)
+				c.Assert(ok, qt.Equals, true)
+				c.Assert(expectField1, qt.CmpEquals(cmpopts.IgnoreInterfaces(struct{ reflect.Type }{})), expectField)
+			}
+		})
 	}
 }

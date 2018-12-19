@@ -11,18 +11,15 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"testing"
 	"time"
 
-	jc "github.com/juju/testing/checkers"
+	qt "github.com/frankban/quicktest"
+	"github.com/google/go-cmp/cmp"
 	"github.com/julienschmidt/httprouter"
-	gc "gopkg.in/check.v1"
 
 	"gopkg.in/httprequest.v1"
 )
-
-type unmarshalSuite struct{}
-
-var _ = gc.Suite(&unmarshalSuite{})
 
 var unmarshalTests = []struct {
 	about       string
@@ -112,10 +109,7 @@ var unmarshalTests = []struct {
 	},
 }, {
 	about: "unexported fields are ignored",
-	val: struct {
-		f int `httprequest:",form"`
-		G int `httprequest:",form"`
-	}{
+	val: sfG{
 		G: 99,
 	},
 	params: httprequest.Params{
@@ -128,9 +122,7 @@ var unmarshalTests = []struct {
 	},
 }, {
 	about: "unexported embedded type works ok",
-	val: struct {
-		sFG
-	}{
+	val: esFG{
 		sFG: sFG{
 			F: 99,
 			G: 100,
@@ -146,9 +138,7 @@ var unmarshalTests = []struct {
 	},
 }, {
 	about: "unexported type for body is ignored",
-	val: struct {
-		foo sFG `httprequest:",body"`
-	}{},
+	val:   bsFG{},
 	params: httprequest.Params{
 		Request: &http.Request{
 			Header: http.Header{"Content-Type": {"application/json"}},
@@ -440,6 +430,11 @@ type BodyWithPointer struct {
 	N *int
 }
 
+type sfG struct {
+	f int `httprequest:",form"`
+	G int `httprequest:",form"`
+}
+
 type SFG struct {
 	F int `httprequest:",form"`
 	G int `httprequest:",form"`
@@ -450,18 +445,31 @@ type sFG struct {
 	G int `httprequest:",form"`
 }
 
-func (*unmarshalSuite) TestUnmarshal(c *gc.C) {
-	for i, test := range unmarshalTests {
-		c.Logf("%d: %s", i, test.about)
-		t := reflect.TypeOf(test.val)
-		fillv := reflect.New(t)
-		err := httprequest.Unmarshal(test.params, fillv.Interface())
-		if test.expectError != "" {
-			c.Assert(err, gc.ErrorMatches, test.expectError)
-			continue
-		}
-		c.Assert(err, gc.Equals, nil)
-		c.Assert(fillv.Elem().Interface(), jc.DeepEquals, test.val)
+type esFG struct {
+	sFG
+}
+
+type bsFG struct {
+	foo sFG `httprequest:",body"`
+}
+
+func TestUnmarshal(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range unmarshalTests {
+		test := test
+		c.Run(test.about, func(c *qt.C) {
+			t := reflect.TypeOf(test.val)
+			fillv := reflect.New(t)
+			err := httprequest.Unmarshal(test.params, fillv.Interface())
+			if test.expectError != "" {
+				c.Assert(err, qt.ErrorMatches, test.expectError)
+				return
+			}
+			c.Assert(err, qt.Equals, nil)
+			c.Assert(fillv.Elem().Interface(), qt.CmpEquals(cmp.AllowUnexported(sfG{}, esFG{}, bsFG{})), test.val)
+		})
+
 	}
 }
 
