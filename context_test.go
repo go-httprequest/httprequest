@@ -6,22 +6,21 @@ package httprequest_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"testing"
 
+	qt "github.com/frankban/quicktest"
 	"github.com/julienschmidt/httprouter"
-	gc "gopkg.in/check.v1"
 
 	"gopkg.in/httprequest.v1"
 )
-
-type contextSuite struct{}
-
-var _ = gc.Suite(&contextSuite{})
 
 type testRequest struct {
 	httprequest.Route `httprequest:"GET /foo"`
 }
 
-func (s *contextSuite) TestContextCancelledWhenDone(c *gc.C) {
+func TestContextCancelledWhenDone(t *testing.T) {
+	c := qt.New(t)
+
 	var ch <-chan struct{}
 	hnd := testServer.Handle(func(p httprequest.Params, req *testRequest) {
 		ch = p.Context.Done()
@@ -30,7 +29,7 @@ func (s *contextSuite) TestContextCancelledWhenDone(c *gc.C) {
 	router.Handle(hnd.Method, hnd.Path, hnd.Handle)
 	srv := httptest.NewServer(router)
 	_, err := http.Get(srv.URL + "/foo")
-	c.Assert(err, gc.Equals, nil)
+	c.Assert(err, qt.Equals, nil)
 	select {
 	case <-ch:
 	default:

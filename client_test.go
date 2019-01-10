@@ -1,29 +1,23 @@
 package httprequest_test
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"testing"
 
-	"github.com/juju/testing"
-	jc "github.com/juju/testing/checkers"
+	qt "github.com/frankban/quicktest"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
 	"golang.org/x/net/context/ctxhttp"
-	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 
 	"gopkg.in/httprequest.v1"
 )
-
-type clientSuite struct {
-	testing.CleanupSuite
-}
-
-var _ = gc.Suite(&clientSuite{})
 
 var callTests = []struct {
 	about       string
@@ -31,7 +25,7 @@ var callTests = []struct {
 	req         interface{}
 	requestUUID string
 	expectError string
-	assertError func(c *gc.C, err error)
+	assertError func(c *qt.C, err error)
 	expectResp  interface{}
 }{{
 	about: "GET success",
@@ -62,11 +56,11 @@ var callTests = []struct {
 		Body: struct{ I bool }{true},
 	},
 	expectError: `Post http:.*: cannot unmarshal parameters: cannot unmarshal into field Body: cannot unmarshal request body: json: cannot unmarshal .*`,
-	assertError: func(c *gc.C, err error) {
-		c.Assert(errgo.Cause(err), gc.FitsTypeOf, (*httprequest.RemoteError)(nil))
+	assertError: func(c *qt.C, err error) {
+		c.Assert(errgo.Cause(err), qt.Satisfies, isRemoteError)
 		err1 := errgo.Cause(err).(*httprequest.RemoteError)
-		c.Assert(err1.Code, gc.Equals, "bad request")
-		c.Assert(err1.Message, gc.Matches, `cannot unmarshal parameters: cannot unmarshal into field Body: cannot unmarshal request body: json: cannot unmarshal .*`)
+		c.Assert(err1.Code, qt.Equals, "bad request")
+		c.Assert(err1.Message, qt.Matches, `cannot unmarshal parameters: cannot unmarshal into field Body: cannot unmarshal request body: json: cannot unmarshal .*`)
 	},
 }, {
 	about: "error unmarshaler returns nil",
@@ -86,29 +80,27 @@ var callTests = []struct {
 	req:         &chM4Req{},
 	expectResp:  new(int),
 	expectError: `Get http://.*/m4: unexpected content type text/plain; want application/json; content: bad response`,
-	assertError: func(c *gc.C, err error) {
-		c.Assert(errgo.Cause(err), gc.FitsTypeOf, (*httprequest.DecodeResponseError)(nil))
-
-		err1 := errgo.Cause(err).(*httprequest.DecodeResponseError)
-		c.Assert(err1.Response, gc.NotNil)
+	assertError: func(c *qt.C, err error) {
+		err1, ok := errgo.Cause(err).(*httprequest.DecodeResponseError)
+		c.Assert(ok, qt.Equals, true, qt.Commentf("error not of type *httprequest.DecodeResponseError (%T)", errgo.Cause(err)))
+		c.Assert(err1.Response, qt.Not(qt.IsNil))
 		data, err := ioutil.ReadAll(err1.Response.Body)
-		c.Assert(err, gc.IsNil)
-		c.Assert(string(data), gc.Equals, "bad response")
+		c.Assert(err, qt.Equals, nil)
+		c.Assert(string(data), qt.Equals, "bad response")
 	},
 }, {
 	about:       "bad content in error response",
 	req:         &chM5Req{},
 	expectResp:  new(int),
 	expectError: `Get http://.*/m5: cannot unmarshal error response \(status 418 I'm a teapot\): unexpected content type text/plain; want application/json; content: bad error value`,
-	assertError: func(c *gc.C, err error) {
-		c.Assert(errgo.Cause(err), gc.FitsTypeOf, (*httprequest.DecodeResponseError)(nil))
-
-		err1 := errgo.Cause(err).(*httprequest.DecodeResponseError)
-		c.Assert(err1.Response, gc.NotNil)
+	assertError: func(c *qt.C, err error) {
+		err1, ok := errgo.Cause(err).(*httprequest.DecodeResponseError)
+		c.Assert(ok, qt.Equals, true, qt.Commentf("error not of type *httprequest.DecodeResponseError (%T)", errgo.Cause(err)))
+		c.Assert(err1.Response, qt.Not(qt.IsNil))
 		data, err := ioutil.ReadAll(err1.Response.Body)
-		c.Assert(err, gc.IsNil)
-		c.Assert(string(data), gc.Equals, "bad error value")
-		c.Assert(err1.Response.StatusCode, gc.Equals, http.StatusTeapot)
+		c.Assert(err, qt.Equals, nil)
+		c.Assert(string(data), qt.Equals, "bad error value")
+		c.Assert(err1.Response.StatusCode, qt.Equals, http.StatusTeapot)
 	},
 }, {
 	about: "doer with context",
@@ -156,36 +148,43 @@ var callTests = []struct {
 	expectResp: &chM1Resp{"hello"},
 }}
 
-func (s *clientSuite) TestCall(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestCall(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
 
-	for i, test := range callTests {
-		c.Logf("test %d: %s", i, test.about)
-		var resp interface{}
-		if test.expectResp != nil {
-			resp = reflect.New(reflect.TypeOf(test.expectResp).Elem()).Interface()
-		}
-		client := test.client
-		client.BaseURL = srv.URL
-		ctx := context.Background()
-		err := client.Call(ctx, test.req, resp)
-		if test.expectError != "" {
-			c.Logf("err %v", errgo.Details(err))
-			c.Check(err, gc.ErrorMatches, test.expectError)
-			if test.assertError != nil {
-				test.assertError(c, err)
+	srv := newServer()
+	c.Defer(srv.Close)
+
+	for _, test := range callTests {
+		c.Run(test.about, func(c *qt.C) {
+			var resp interface{}
+			if test.expectResp != nil {
+				resp = reflect.New(reflect.TypeOf(test.expectResp).Elem()).Interface()
 			}
-			continue
-		}
-		c.Assert(err, gc.IsNil)
-		c.Assert(resp, jc.DeepEquals, test.expectResp)
+			client := test.client
+			client.BaseURL = srv.URL
+			ctx := context.Background()
+			err := client.Call(ctx, test.req, resp)
+			if test.expectError != "" {
+				c.Logf("err %v", errgo.Details(err))
+				c.Check(err, qt.ErrorMatches, test.expectError)
+				if test.assertError != nil {
+					test.assertError(c, err)
+				}
+				return
+			}
+			c.Assert(err, qt.Equals, nil)
+			c.Assert(resp, qt.DeepEquals, test.expectResp)
+		})
 	}
 }
 
-func (s *clientSuite) TestCallURLNoRequestPath(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestCallURLNoRequestPath(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
 
 	var client httprequest.Client
 	req := struct {
@@ -198,8 +197,8 @@ func (s *clientSuite) TestCallURLNoRequestPath(c *gc.C) {
 	}
 	var resp chM1Resp
 	err := client.CallURL(context.Background(), srv.URL+"/m1/:P", &req, &resp)
-	c.Assert(err, gc.IsNil)
-	c.Assert(resp, jc.DeepEquals, chM1Resp{"hello"})
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(resp, qt.DeepEquals, chM1Resp{"hello"})
 }
 
 func mustNewRequest(url string, method string, body io.Reader) *http.Request {
@@ -266,51 +265,65 @@ func newInt64(i int64) *int64 {
 	return &i
 }
 
-func (s *clientSuite) TestDo(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
-	for i, test := range doTests {
-		c.Logf("test %d: %s", i, test.about)
-		var resp interface{}
-		if test.expectResp != nil {
-			resp = reflect.New(reflect.TypeOf(test.expectResp).Elem()).Interface()
-		}
-		client := test.client
-		if client.BaseURL == "" {
-			client.BaseURL = srv.URL
-		}
-		ctx := context.Background()
-		err := client.Do(ctx, test.request, resp)
-		if test.expectError != "" {
-			c.Assert(err, gc.ErrorMatches, test.expectError)
-			if test.expectCause != nil {
-				c.Assert(errgo.Cause(err), jc.DeepEquals, test.expectCause)
+func TestDo(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
+	for _, test := range doTests {
+		test := test
+		c.Run(test.about, func(c *qt.C) {
+			var resp interface{}
+			if test.expectResp != nil {
+				resp = reflect.New(reflect.TypeOf(test.expectResp).Elem()).Interface()
 			}
-			continue
-		}
-		c.Assert(err, gc.IsNil)
-		c.Assert(resp, jc.DeepEquals, test.expectResp)
+			client := test.client
+			if client.BaseURL == "" {
+				client.BaseURL = srv.URL
+			}
+			ctx := context.Background()
+			err := client.Do(ctx, test.request, resp)
+			if test.expectError != "" {
+				c.Assert(err, qt.ErrorMatches, test.expectError)
+				if test.expectCause != nil {
+					c.Assert(errgo.Cause(err), qt.DeepEquals, test.expectCause)
+				}
+				return
+			}
+			c.Assert(err, qt.Equals, nil)
+			c.Assert(resp, qt.DeepEquals, test.expectResp)
+		})
 	}
 }
 
-func (s *clientSuite) TestDoWithHTTPReponse(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestDoWithHTTPReponse(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
 	}
 	var resp *http.Response
 	err := client.Get(context.Background(), "/m1/foo", &resp)
-	c.Assert(err, gc.IsNil)
+	c.Assert(err, qt.Equals, nil)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)
-	c.Assert(err, gc.IsNil)
-	c.Assert(string(data), gc.Equals, `{"P":"foo"}`)
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(string(data), qt.Equals, `{"P":"foo"}`)
 }
 
-func (s *clientSuite) TestDoWithHTTPReponseAndError(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestDoWithHTTPReponseAndError(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	var doer closeCountingDoer // Also check the body is closed.
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
@@ -318,15 +331,19 @@ func (s *clientSuite) TestDoWithHTTPReponseAndError(c *gc.C) {
 	}
 	var resp *http.Response
 	err := client.Get(context.Background(), "/m3", &resp)
-	c.Assert(resp, gc.IsNil)
-	c.Assert(err, gc.ErrorMatches, `Get http:.*/m3: m3 error`)
-	c.Assert(doer.openedBodies, gc.Equals, 1)
-	c.Assert(doer.closedBodies, gc.Equals, 1)
+	c.Assert(resp, qt.IsNil)
+	c.Assert(err, qt.ErrorMatches, `Get http:.*/m3: m3 error`)
+	c.Assert(doer.openedBodies, qt.Equals, 1)
+	c.Assert(doer.closedBodies, qt.Equals, 1)
 }
 
-func (s *clientSuite) TestCallWithHTTPResponse(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestCallWithHTTPResponse(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
 	}
@@ -336,13 +353,17 @@ func (s *clientSuite) TestCallWithHTTPResponse(c *gc.C) {
 	}, &resp)
 	defer resp.Body.Close()
 	data, err := ioutil.ReadAll(resp.Body)
-	c.Assert(err, gc.IsNil)
-	c.Assert(string(data), gc.Equals, `{"P":"foo"}`)
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(string(data), qt.Equals, `{"P":"foo"}`)
 }
 
-func (s *clientSuite) TestCallClosesResponseBodyOnSuccess(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestCallClosesResponseBodyOnSuccess(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	var doer closeCountingDoer
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
@@ -352,83 +373,105 @@ func (s *clientSuite) TestCallClosesResponseBodyOnSuccess(c *gc.C) {
 	err := client.Call(context.Background(), &chM1Req{
 		P: "foo",
 	}, &resp)
-	c.Assert(err, gc.IsNil)
-	c.Assert(resp, jc.DeepEquals, chM1Resp{"foo"})
-	c.Assert(doer.openedBodies, gc.Equals, 1)
-	c.Assert(doer.closedBodies, gc.Equals, 1)
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(resp, qt.DeepEquals, chM1Resp{"foo"})
+	c.Assert(doer.openedBodies, qt.Equals, 1)
+	c.Assert(doer.closedBodies, qt.Equals, 1)
 }
 
-func (s *clientSuite) TestCallClosesResponseBodyOnError(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestCallClosesResponseBodyOnError(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	var doer closeCountingDoer
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
 		Doer:    &doer,
 	}
 	err := client.Call(context.Background(), &chM3Req{}, nil)
-	c.Assert(err, gc.ErrorMatches, ".*m3 error")
-	c.Assert(doer.openedBodies, gc.Equals, 1)
-	c.Assert(doer.closedBodies, gc.Equals, 1)
+	c.Assert(err, qt.ErrorMatches, ".*m3 error")
+	c.Assert(doer.openedBodies, qt.Equals, 1)
+	c.Assert(doer.closedBodies, qt.Equals, 1)
 }
 
-func (s *clientSuite) TestDoClosesResponseBodyOnSuccess(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestDoClosesResponseBodyOnSuccess(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	var doer closeCountingDoer
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
 		Doer:    &doer,
 	}
 	req, err := http.NewRequest("GET", "/m1/foo", nil)
-	c.Assert(err, gc.IsNil)
+	c.Assert(err, qt.Equals, nil)
 	var resp chM1Resp
 	err = client.Do(context.Background(), req, &resp)
-	c.Assert(err, gc.IsNil)
-	c.Assert(resp, jc.DeepEquals, chM1Resp{"foo"})
-	c.Assert(doer.openedBodies, gc.Equals, 1)
-	c.Assert(doer.closedBodies, gc.Equals, 1)
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(resp, qt.DeepEquals, chM1Resp{"foo"})
+	c.Assert(doer.openedBodies, qt.Equals, 1)
+	c.Assert(doer.closedBodies, qt.Equals, 1)
 }
 
-func (s *clientSuite) TestDoClosesResponseBodyOnError(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestDoClosesResponseBodyOnError(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	var doer closeCountingDoer
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
 		Doer:    &doer,
 	}
 	req, err := http.NewRequest("GET", "/m3", nil)
-	c.Assert(err, gc.IsNil)
+	c.Assert(err, qt.Equals, nil)
 	err = client.Do(context.Background(), req, nil)
-	c.Assert(err, gc.ErrorMatches, ".*m3 error")
-	c.Assert(doer.openedBodies, gc.Equals, 1)
-	c.Assert(doer.closedBodies, gc.Equals, 1)
+	c.Assert(err, qt.ErrorMatches, ".*m3 error")
+	c.Assert(doer.openedBodies, qt.Equals, 1)
+	c.Assert(doer.closedBodies, qt.Equals, 1)
 }
 
-func (s *clientSuite) TestGet(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestGet(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	client := httprequest.Client{
 		BaseURL: srv.URL,
 	}
 	var resp chM1Resp
 	err := client.Get(context.Background(), "/m1/foo", &resp)
-	c.Assert(err, gc.IsNil)
-	c.Assert(resp, jc.DeepEquals, chM1Resp{"foo"})
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(resp, qt.DeepEquals, chM1Resp{"foo"})
 }
 
-func (s *clientSuite) TestGetNoBaseURL(c *gc.C) {
-	srv := s.newServer()
-	defer srv.Close()
+func TestGetNoBaseURL(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	srv := newServer()
+	c.Defer(srv.Close)
+
 	client := httprequest.Client{}
 	var resp chM1Resp
 	err := client.Get(context.Background(), srv.URL+"/m1/foo", &resp)
-	c.Assert(err, gc.IsNil)
-	c.Assert(resp, jc.DeepEquals, chM1Resp{"foo"})
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(resp, qt.DeepEquals, chM1Resp{"foo"})
 }
 
-func (s *clientSuite) TestUnmarshalJSONResponseWithBodyReadError(c *gc.C) {
+func TestUnmarshalJSONResponseWithBodyReadError(t *testing.T) {
+	c := qt.New(t)
+
 	resp := &http.Response{
 		Header: http.Header{
 			"Content-Type": {"application/json"},
@@ -441,12 +484,14 @@ func (s *clientSuite) TestUnmarshalJSONResponseWithBodyReadError(c *gc.C) {
 	}
 	var val map[string]string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
-	c.Assert(err, gc.ErrorMatches, `error reading response body: some bad read`)
-	c.Assert(val, gc.IsNil)
+	c.Assert(err, qt.ErrorMatches, `error reading response body: some bad read`)
+	c.Assert(val, qt.IsNil)
 	assertDecodeResponseError(c, err, http.StatusOK, `{"one": "two"}`)
 }
 
-func (s *clientSuite) TestUnmarshalJSONResponseWithBadContentType(c *gc.C) {
+func TestUnmarshalJSONResponseWithBadContentType(t *testing.T) {
+	c := qt.New(t)
+
 	resp := &http.Response{
 		Header: http.Header{
 			"Content-Type": {"foo/bar"},
@@ -456,13 +501,16 @@ func (s *clientSuite) TestUnmarshalJSONResponseWithBadContentType(c *gc.C) {
 	}
 	var val map[string]string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
-	c.Assert(err, gc.ErrorMatches, `unexpected content type foo/bar; want application/json; content: "something or other"`)
-	c.Assert(val, gc.IsNil)
+	c.Assert(err, qt.ErrorMatches, `unexpected content type foo/bar; want application/json; content: "something or other"`)
+	c.Assert(val, qt.IsNil)
 	assertDecodeResponseError(c, err, http.StatusTeapot, `something or other`)
 }
 
-func (s *clientSuite) TestUnmarshalJSONResponseWithErrorAndLargeBody(c *gc.C) {
-	s.PatchValue(httprequest.MaxErrorBodySize, 11)
+func TestUnmarshalJSONResponseWithErrorAndLargeBody(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	c.Patch(httprequest.MaxErrorBodySize, 11)
 
 	resp := &http.Response{
 		Header: http.Header{
@@ -473,13 +521,16 @@ func (s *clientSuite) TestUnmarshalJSONResponseWithErrorAndLargeBody(c *gc.C) {
 	}
 	var val map[string]string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
-	c.Assert(err, gc.ErrorMatches, `unexpected content type foo/bar; want application/json; content: "123456789 1"`)
-	c.Assert(val, gc.IsNil)
+	c.Assert(err, qt.ErrorMatches, `unexpected content type foo/bar; want application/json; content: "123456789 1"`)
+	c.Assert(val, qt.IsNil)
 	assertDecodeResponseError(c, err, http.StatusOK, `123456789 1`)
 }
 
-func (s *clientSuite) TestUnmarshalJSONResponseWithLargeBody(c *gc.C) {
-	s.PatchValue(httprequest.MaxErrorBodySize, 11)
+func TestUnmarshalJSONResponseWithLargeBody(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	c.Patch(httprequest.MaxErrorBodySize, 11)
 
 	resp := &http.Response{
 		Header: http.Header{
@@ -490,11 +541,13 @@ func (s *clientSuite) TestUnmarshalJSONResponseWithLargeBody(c *gc.C) {
 	}
 	var val string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
-	c.Assert(err, gc.IsNil)
-	c.Assert(val, gc.Equals, "23456789 123456789")
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(val, qt.Equals, "23456789 123456789")
 }
 
-func (s *clientSuite) TestUnmarshalJSONWithDecodeError(c *gc.C) {
+func TestUnmarshalJSONWithDecodeError(t *testing.T) {
+	c := qt.New(t)
+
 	resp := &http.Response{
 		Header: http.Header{
 			"Content-Type": {"application/json"},
@@ -504,13 +557,16 @@ func (s *clientSuite) TestUnmarshalJSONWithDecodeError(c *gc.C) {
 	}
 	var val chan string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
-	c.Assert(err, gc.ErrorMatches, `json: cannot unmarshal object into Go value of type chan string`)
-	c.Assert(val, gc.IsNil)
+	c.Assert(err, qt.ErrorMatches, `json: cannot unmarshal object into Go value of type chan string`)
+	c.Assert(val, qt.IsNil)
 	assertDecodeResponseError(c, err, http.StatusOK, `{"one": "two"}`)
 }
 
-func (s *clientSuite) TestUnmarshalJSONWithDecodeErrorAndLargeBody(c *gc.C) {
-	s.PatchValue(httprequest.MaxErrorBodySize, 11)
+func TestUnmarshalJSONWithDecodeErrorAndLargeBody(t *testing.T) {
+	c := qt.New(t)
+	defer c.Done()
+
+	c.Patch(httprequest.MaxErrorBodySize, 11)
 
 	resp := &http.Response{
 		Header: http.Header{
@@ -521,21 +577,21 @@ func (s *clientSuite) TestUnmarshalJSONWithDecodeErrorAndLargeBody(c *gc.C) {
 	}
 	var val chan string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
-	c.Assert(err, gc.ErrorMatches, `json: cannot unmarshal string into Go value of type chan string`)
-	c.Assert(val, gc.IsNil)
+	c.Assert(err, qt.ErrorMatches, `json: cannot unmarshal string into Go value of type chan string`)
+	c.Assert(val, qt.IsNil)
 	assertDecodeResponseError(c, err, http.StatusOK, `"23456789 1`)
 }
 
-func assertDecodeResponseError(c *gc.C, err error, status int, body string) {
-	c.Assert(errgo.Cause(err), gc.FitsTypeOf, (*httprequest.DecodeResponseError)(nil))
-	err1 := errgo.Cause(err).(*httprequest.DecodeResponseError)
+func assertDecodeResponseError(c *qt.C, err error, status int, body string) {
+	err1, ok := errgo.Cause(err).(*httprequest.DecodeResponseError)
+	c.Assert(ok, qt.Equals, true, qt.Commentf("error not of type *httprequest.DecodeResponseError (%T)", errgo.Cause(err)))
 	data, err := ioutil.ReadAll(err1.Response.Body)
-	c.Assert(err, gc.IsNil)
-	c.Assert(err1.Response.StatusCode, gc.Equals, status)
-	c.Assert(string(data), gc.Equals, body)
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(err1.Response.StatusCode, qt.Equals, status)
+	c.Assert(string(data), qt.Equals, body)
 }
 
-func (*clientSuite) newServer() *httptest.Server {
+func newServer() *httptest.Server {
 	f := func(p httprequest.Params) (clientHandlers, context.Context, error) {
 		return clientHandlers{}, p.Context, nil
 	}
@@ -599,17 +655,21 @@ var appendURLTests = []struct {
 	expect: "http://xxx.com/a/b/c?z=w",
 }}
 
-func (*clientSuite) TestAppendURL(c *gc.C) {
-	for i, test := range appendURLTests {
-		c.Logf("test %d: %s %s", i, test.u, test.p)
-		u, err := httprequest.AppendURL(test.u, test.p)
-		if test.expectError != "" {
-			c.Assert(u, gc.IsNil)
-			c.Assert(err, gc.ErrorMatches, test.expectError)
-		} else {
-			c.Assert(err, gc.IsNil)
-			c.Assert(u.String(), gc.Equals, test.expect)
-		}
+func TestAppendURL(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range appendURLTests {
+		test := test
+		c.Run(fmt.Sprintf("%s_%s", test.u, test.p), func(c *qt.C) {
+			u, err := httprequest.AppendURL(test.u, test.p)
+			if test.expectError != "" {
+				c.Assert(u, qt.IsNil)
+				c.Assert(err, qt.ErrorMatches, test.expectError)
+			} else {
+				c.Assert(err, qt.Equals, nil)
+				c.Assert(u.String(), qt.Equals, test.expect)
+			}
+		})
 	}
 }
 
@@ -773,4 +833,9 @@ func (r *largeReader) Close() error {
 	// problem.
 	r.n = 0
 	return nil
+}
+
+func isRemoteError(err error) bool {
+	_, ok := err.(*httprequest.RemoteError)
+	return ok
 }

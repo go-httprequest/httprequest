@@ -11,20 +11,17 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"reflect"
+	"testing"
 
-	jc "github.com/juju/testing/checkers"
-	"github.com/juju/testing/httptesting"
+	qt "github.com/frankban/quicktest"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/juju/qthttptest"
 	"github.com/julienschmidt/httprouter"
 	"golang.org/x/net/context"
-	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 
 	"gopkg.in/httprequest.v1"
 )
-
-type handlerSuite struct{}
-
-var _ = gc.Suite(&handlerSuite{})
 
 type customError struct {
 	httprequest.RemoteError
@@ -32,7 +29,7 @@ type customError struct {
 
 var handleTests = []struct {
 	about        string
-	f            func(c *gc.C) interface{}
+	f            func(c *qt.C) interface{}
 	req          *http.Request
 	pathVar      httprouter.Params
 	expectMethod string
@@ -41,26 +38,26 @@ var handleTests = []struct {
 	expectStatus int
 }{{
 	about: "function with no return",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A string         `httprequest:"a,path"`
 			B map[string]int `httprequest:",body"`
 			C int            `httprequest:"c,form"`
 		}
 		return func(p httprequest.Params, s *testStruct) {
-			c.Assert(s, jc.DeepEquals, &testStruct{
+			c.Assert(s, qt.DeepEquals, &testStruct{
 				A: "A",
 				B: map[string]int{"hello": 99},
 				C: 43,
 			})
-			c.Assert(p.PathVar, jc.DeepEquals, httprouter.Params{{
+			c.Assert(p.PathVar, qt.DeepEquals, httprouter.Params{{
 				Key:   "a",
 				Value: "A",
 			}})
-			c.Assert(p.Request.Form, jc.DeepEquals, url.Values{
+			c.Assert(p.Request.Form, qt.DeepEquals, url.Values{
 				"c": {"43"},
 			})
-			c.Assert(p.PathPattern, gc.Equals, "")
+			c.Assert(p.PathPattern, qt.Equals, "")
 			p.Response.Header().Set("Content-Type", "application/json")
 			p.Response.Write([]byte("true"))
 		}
@@ -79,13 +76,13 @@ var handleTests = []struct {
 	expectBody: true,
 }, {
 	about: "function with error return that returns no error",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(p httprequest.Params, s *testStruct) error {
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
-			c.Assert(p.PathPattern, gc.Equals, "")
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
+			c.Assert(p.PathPattern, qt.Equals, "")
 			p.Response.Header().Set("Content-Type", "application/json")
 			p.Response.Write([]byte("true"))
 			return nil
@@ -99,13 +96,13 @@ var handleTests = []struct {
 	expectBody: true,
 }, {
 	about: "function with error return that returns an error",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(p httprequest.Params, s *testStruct) error {
-			c.Assert(p.PathPattern, gc.Equals, "")
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(p.PathPattern, qt.Equals, "")
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return errUnauth
 		}
 	},
@@ -121,13 +118,13 @@ var handleTests = []struct {
 	expectStatus: http.StatusUnauthorized,
 }, {
 	about: "function with value return that returns a value",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(p httprequest.Params, s *testStruct) (int, error) {
-			c.Assert(p.PathPattern, gc.Equals, "")
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(p.PathPattern, qt.Equals, "")
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return 1234, nil
 		}
 	},
@@ -139,13 +136,13 @@ var handleTests = []struct {
 	expectBody: 1234,
 }, {
 	about: "function with value return that returns an error",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(p httprequest.Params, s *testStruct) (int, error) {
-			c.Assert(p.PathPattern, gc.Equals, "")
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(p.PathPattern, qt.Equals, "")
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return 0, errUnauth
 		}
 	},
@@ -161,16 +158,16 @@ var handleTests = []struct {
 	expectStatus: http.StatusUnauthorized,
 }, {
 	about: "function with value return that writes to p.Response",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(p httprequest.Params, s *testStruct) (int, error) {
-			c.Assert(p.PathPattern, gc.Equals, "")
+			c.Assert(p.PathPattern, qt.Equals, "")
 			_, err := p.Response.Write(nil)
-			c.Assert(err, gc.ErrorMatches, "inappropriate call to ResponseWriter.Write in JSON-returning handler")
+			c.Assert(err, qt.ErrorMatches, "inappropriate call to ResponseWriter.Write in JSON-returning handler")
 			p.Response.WriteHeader(http.StatusTeapot)
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return 1234, nil
 		}
 	},
@@ -182,14 +179,14 @@ var handleTests = []struct {
 	expectBody: 1234,
 }, {
 	about: "function with no Params and no return",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A string         `httprequest:"a,path"`
 			B map[string]int `httprequest:",body"`
 			C int            `httprequest:"c,form"`
 		}
 		return func(s *testStruct) {
-			c.Assert(s, jc.DeepEquals, &testStruct{
+			c.Assert(s, qt.DeepEquals, &testStruct{
 				A: "A",
 				B: map[string]int{"hello": 99},
 				C: 43,
@@ -209,12 +206,12 @@ var handleTests = []struct {
 	}},
 }, {
 	about: "function with no Params with error return that returns no error",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(s *testStruct) error {
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return nil
 		}
 	},
@@ -225,12 +222,12 @@ var handleTests = []struct {
 	}},
 }, {
 	about: "function with no Params with error return that returns an error",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(s *testStruct) error {
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return errUnauth
 		}
 	},
@@ -246,12 +243,12 @@ var handleTests = []struct {
 	expectStatus: http.StatusUnauthorized,
 }, {
 	about: "function with no Params with value return that returns a value",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(s *testStruct) (int, error) {
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return 1234, nil
 		}
 	},
@@ -263,12 +260,12 @@ var handleTests = []struct {
 	expectBody: 1234,
 }, {
 	about: "function with no Params with value return that returns an error",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
 		return func(s *testStruct) (int, error) {
-			c.Assert(s, jc.DeepEquals, &testStruct{123})
+			c.Assert(s, qt.DeepEquals, &testStruct{123})
 			return 0, errUnauth
 		}
 	},
@@ -284,7 +281,7 @@ var handleTests = []struct {
 	expectStatus: http.StatusUnauthorized,
 }, {
 	about: "error when unmarshaling",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
@@ -305,7 +302,7 @@ var handleTests = []struct {
 	expectStatus: http.StatusBadRequest,
 }, {
 	about: "error when unmarshaling, no Params",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
@@ -326,7 +323,7 @@ var handleTests = []struct {
 	expectStatus: http.StatusBadRequest,
 }, {
 	about: "error when unmarshaling single value return",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			A int `httprequest:"a,path"`
 		}
@@ -347,7 +344,7 @@ var handleTests = []struct {
 	expectStatus: http.StatusBadRequest,
 }, {
 	about: "return type that can't be marshaled as JSON",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		return func(p httprequest.Params, s *struct{}) (chan int, error) {
 			return make(chan int), nil
 		}
@@ -360,14 +357,14 @@ var handleTests = []struct {
 	expectStatus: http.StatusInternalServerError,
 }, {
 	about: "argument with route",
-	f: func(c *gc.C) interface{} {
+	f: func(c *qt.C) interface{} {
 		type testStruct struct {
 			httprequest.Route `httprequest:"GET /foo/:bar"`
 			A                 string `httprequest:"bar,path"`
 		}
 		return func(p httprequest.Params, s *testStruct) {
-			c.Check(s.A, gc.Equals, "val")
-			c.Assert(p.PathPattern, gc.Equals, "/foo/:bar")
+			c.Check(s.A, qt.Equals, "val")
+			c.Assert(p.PathPattern, qt.Equals, "/foo/:bar")
 		}
 	},
 	req: &http.Request{},
@@ -379,86 +376,106 @@ var handleTests = []struct {
 	expectPath:   "/foo/:bar",
 }}
 
-func (*handlerSuite) TestHandle(c *gc.C) {
-	for i, test := range handleTests {
-		c.Logf("%d: %s", i, test.about)
-		h := testServer.Handle(test.f(c))
-		c.Assert(h.Method, gc.Equals, test.expectMethod)
-		c.Assert(h.Path, gc.Equals, test.expectPath)
-		rec := httptest.NewRecorder()
-		h.Handle(rec, test.req, test.pathVar)
-		if test.expectStatus == 0 {
-			test.expectStatus = http.StatusOK
-		}
-		httptesting.AssertJSONResponse(c, rec, test.expectStatus, test.expectBody)
+func TestHandle(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range handleTests {
+		test := test
+		c.Run(test.about, func(c *qt.C) {
+			h := testServer.Handle(test.f(c))
+			c.Assert(h.Method, qt.Equals, test.expectMethod)
+			c.Assert(h.Path, qt.Equals, test.expectPath)
+			rec := httptest.NewRecorder()
+			h.Handle(rec, test.req, test.pathVar)
+			if test.expectStatus == 0 {
+				test.expectStatus = http.StatusOK
+			}
+			qthttptest.AssertJSONResponse(c, rec, test.expectStatus, test.expectBody)
+		})
 	}
 }
 
 var handlePanicTests = []struct {
+	name   string
 	f      interface{}
 	expect string
 }{{
+	name:   "not-a-function",
 	f:      42,
 	expect: "bad handler function: not a function",
 }, {
+	name:   "no-argument",
 	f:      func(httprequest.Params) {},
 	expect: "bad handler function: no argument parameter after Params argument",
 }, {
+	name:   "too-many-parameters",
 	f:      func(httprequest.Params, *struct{}, struct{}) {},
 	expect: "bad handler function: has 3 parameters, need 1 or 2",
 }, {
+	name:   "bad-return-type",
 	f:      func(httprequest.Params, *struct{}) struct{} { return struct{}{} },
 	expect: "bad handler function: final result parameter is struct {}, need error",
 }, {
+	name: "bad-first-parameter",
 	f: func(http.ResponseWriter, httprequest.Params) (struct{}, error) {
 		return struct{}{}, nil
 	},
 	expect: "bad handler function: first argument is http.ResponseWriter, need httprequest.Params",
 }, {
+	name: "bad-final-return-type",
 	f: func(httprequest.Params, *struct{}) (struct{}, struct{}) {
 		return struct{}{}, struct{}{}
 	},
 	expect: "bad handler function: final result parameter is struct {}, need error",
 }, {
+	name:   "bad-first-parameter2",
 	f:      func(*http.Request, *struct{}) {},
 	expect: `bad handler function: first argument is \*http.Request, need httprequest.Params`,
 }, {
+	name:   "parameter-not-pointer",
 	f:      func(httprequest.Params, struct{}) {},
 	expect: "bad handler function: last argument cannot be used for Unmarshal: type is not pointer to struct",
 }, {
+	name: "invalid-tag",
 	f: func(httprequest.Params, *struct {
 		A int `httprequest:"a,the-ether"`
 	}) {
 	},
 	expect: `bad handler function: last argument cannot be used for Unmarshal: bad tag "httprequest:\\"a,the-ether\\"" in field A: unknown tag flag "the-ether"`,
 }, {
+	name:   "too-many-results",
 	f:      func(httprequest.Params, *struct{}) (a, b, c struct{}) { return },
 	expect: `bad handler function: has 3 result parameters, need 0, 1 or 2`,
 }, {
+	name: "no-route-tag",
 	f: func(*struct {
 		httprequest.Route
 	}) {
 	},
 	expect: `bad handler function: last argument cannot be used for Unmarshal: bad route tag "": no httprequest tag`,
 }, {
+	name: "invalid-route-tag",
 	f: func(*struct {
 		httprequest.Route `othertag:"foo"`
 	}) {
 	},
 	expect: `bad handler function: last argument cannot be used for Unmarshal: bad route tag "othertag:\\"foo\\"": no httprequest tag`,
 }, {
+	name: "invalid-route-tag-value",
 	f: func(*struct {
 		httprequest.Route `httprequest:""`
 	}) {
 	},
 	expect: `bad handler function: last argument cannot be used for Unmarshal: bad route tag "httprequest:\\"\\"": no httprequest tag`,
 }, {
+	name: "invalid-route-tag-too-many-fields",
 	f: func(*struct {
 		httprequest.Route `httprequest:"GET /foo /bar"`
 	}) {
 	},
 	expect: `bad handler function: last argument cannot be used for Unmarshal: bad route tag "httprequest:\\"GET /foo /bar\\"": wrong field count`,
 }, {
+	name: "invalid-route-tag-invalid-method",
 	f: func(*struct {
 		httprequest.Route `httprequest:"BAD /foo"`
 	}) {
@@ -466,35 +483,38 @@ var handlePanicTests = []struct {
 	expect: `bad handler function: last argument cannot be used for Unmarshal: bad route tag "httprequest:\\"BAD /foo\\"": invalid method`,
 }}
 
-func (*handlerSuite) TestHandlePanicsWithBadFunctions(c *gc.C) {
-	for i, test := range handlePanicTests {
-		c.Logf("%d: %s", i, test.expect)
-		c.Check(func() {
-			testServer.Handle(test.f)
-		}, gc.PanicMatches, test.expect)
+func TestHandlePanicsWithBadFunctions(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range handlePanicTests {
+		c.Run(test.name, func(c *qt.C) {
+			c.Check(func() {
+				testServer.Handle(test.f)
+			}, qt.PanicMatches, test.expect)
+		})
 	}
 }
 
 var handlersTests = []struct {
 	calledMethod      string
-	callParams        httptesting.JSONCallParams
+	callParams        qthttptest.JSONCallParams
 	expectPathPattern string
 }{{
 	calledMethod: "M1",
-	callParams: httptesting.JSONCallParams{
+	callParams: qthttptest.JSONCallParams{
 		URL: "/m1/99",
 	},
 	expectPathPattern: "/m1/:p",
 }, {
 	calledMethod: "M2",
-	callParams: httptesting.JSONCallParams{
+	callParams: qthttptest.JSONCallParams{
 		URL:        "/m2/99",
 		ExpectBody: 999,
 	},
 	expectPathPattern: "/m2/:p",
 }, {
 	calledMethod: "M3",
-	callParams: httptesting.JSONCallParams{
+	callParams: qthttptest.JSONCallParams{
 		URL: "/m3/99",
 		ExpectBody: &httprequest.RemoteError{
 			Message: "m3 error",
@@ -504,7 +524,7 @@ var handlersTests = []struct {
 	expectPathPattern: "/m3/:p",
 }, {
 	calledMethod: "M3Post",
-	callParams: httptesting.JSONCallParams{
+	callParams: qthttptest.JSONCallParams{
 		Method:   "POST",
 		URL:      "/m3/99",
 		JSONBody: make(map[string]interface{}),
@@ -512,7 +532,9 @@ var handlersTests = []struct {
 	expectPathPattern: "/m3/:p",
 }}
 
-func (*handlerSuite) TestHandlers(c *gc.C) {
+func TestHandlers(t *testing.T) {
+	c := qt.New(t)
+
 	handleVal := testHandlers{
 		c: c,
 	}
@@ -539,30 +561,32 @@ func (*handlerSuite) TestHandlers(c *gc.C) {
 		Method: "POST",
 		Path:   "/m3/:p",
 	}}
-	c.Assert(handlers1, jc.DeepEquals, expectHandlers)
-	c.Assert(handlersTests, gc.HasLen, len(expectHandlers))
+	c.Assert(handlers1, qt.DeepEquals, expectHandlers)
+	c.Assert(handlersTests, qt.HasLen, len(expectHandlers))
 
 	router := httprouter.New()
 	for _, h := range handlers {
 		c.Logf("adding %s %s", h.Method, h.Path)
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
-	for i, test := range handlersTests {
-		c.Logf("test %d: %s", i, test.calledMethod)
-		handleVal = testHandlers{
-			c: c,
-		}
-		test.callParams.Handler = router
-		httptesting.AssertJSONCall(c, test.callParams)
-		c.Assert(handleVal.calledMethod, gc.Equals, test.calledMethod)
-		c.Assert(handleVal.p.PathPattern, gc.Equals, test.expectPathPattern)
+	for _, test := range handlersTests {
+		test := test
+		c.Run(test.calledMethod, func(c *qt.C) {
+			handleVal = testHandlers{
+				c: c,
+			}
+			test.callParams.Handler = router
+			qthttptest.AssertJSONCall(c, test.callParams)
+			c.Assert(handleVal.calledMethod, qt.Equals, test.calledMethod)
+			c.Assert(handleVal.p.PathPattern, qt.Equals, test.expectPathPattern)
+		})
 	}
 }
 
 type testHandlers struct {
 	calledMethod  string
 	calledContext context.Context
-	c             *gc.C
+	c             *qt.C
 	p             httprequest.Params
 }
 
@@ -572,12 +596,12 @@ func (h *testHandlers) M1(p httprequest.Params, arg *struct {
 }) {
 	h.calledMethod = "M1"
 	h.calledContext = p.Context
-	h.c.Check(arg.P, gc.Equals, 99)
-	h.c.Check(p.Response, gc.Equals, h.p.Response)
-	h.c.Check(p.Request, gc.Equals, h.p.Request)
-	h.c.Check(p.PathVar, gc.DeepEquals, h.p.PathVar)
-	h.c.Check(p.PathPattern, gc.Equals, "/m1/:p")
-	h.c.Check(p.Context, gc.NotNil)
+	h.c.Check(arg.P, qt.Equals, 99)
+	h.c.Check(p.Response, qt.Equals, h.p.Response)
+	h.c.Check(p.Request, qt.Equals, h.p.Request)
+	h.c.Check(p.PathVar, qt.DeepEquals, h.p.PathVar)
+	h.c.Check(p.PathPattern, qt.Equals, "/m1/:p")
+	h.c.Check(p.Context, qt.Not(qt.IsNil))
 }
 
 type m2Request struct {
@@ -587,7 +611,7 @@ type m2Request struct {
 
 func (h *testHandlers) M2(arg *m2Request) (int, error) {
 	h.calledMethod = "M2"
-	h.c.Check(arg.P, gc.Equals, 99)
+	h.c.Check(arg.P, qt.Equals, 99)
 	return 999, nil
 }
 
@@ -599,7 +623,7 @@ func (h *testHandlers) M3(arg *struct {
 	P                 int `httprequest:"p,path"`
 }) (int, error) {
 	h.calledMethod = "M3"
-	h.c.Check(arg.P, gc.Equals, 99)
+	h.c.Check(arg.P, qt.Equals, 99)
 	return 0, errgo.New("m3 error")
 }
 
@@ -608,10 +632,12 @@ func (h *testHandlers) M3Post(arg *struct {
 	P                 int `httprequest:"p,path"`
 }) {
 	h.calledMethod = "M3Post"
-	h.c.Check(arg.P, gc.Equals, 99)
+	h.c.Check(arg.P, qt.Equals, 99)
 }
 
-func (*handlerSuite) TestHandlersRootFuncWithRequestArg(c *gc.C) {
+func TestHandlersRootFuncWithRequestArg(t *testing.T) {
+	c := qt.New(t)
+
 	handleVal := testHandlers{
 		c: c,
 	}
@@ -624,17 +650,19 @@ func (*handlerSuite) TestHandlersRootFuncWithRequestArg(c *gc.C) {
 	for _, h := range testServer.Handlers(f) {
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+	qthttptest.AssertJSONCall(c, qthttptest.JSONCallParams{
 		Handler:    router,
 		URL:        "/m2/99",
 		ExpectBody: 999,
 	})
-	c.Assert(gotArg, jc.DeepEquals, &m2Request{
+	c.Assert(gotArg, qt.DeepEquals, &m2Request{
 		P: 99,
 	})
 }
 
-func (*handlerSuite) TestHandlersRootFuncReturningInterface(c *gc.C) {
+func TestHandlersRootFuncReturningInterface(t *testing.T) {
+	c := qt.New(t)
+
 	handleVal := testHandlers{
 		c: c,
 	}
@@ -648,14 +676,16 @@ func (*handlerSuite) TestHandlersRootFuncReturningInterface(c *gc.C) {
 	for _, h := range testServer.Handlers(f) {
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+	qthttptest.AssertJSONCall(c, qthttptest.JSONCallParams{
 		Handler:    router,
 		URL:        "/m2/99",
 		ExpectBody: 999,
 	})
 }
 
-func (*handlerSuite) TestHandlersRootFuncWithIncompatibleRequestArg(c *gc.C) {
+func TestHandlersRootFuncWithIncompatibleRequestArg(t *testing.T) {
+	c := qt.New(t)
+
 	handleVal := testHandlers{
 		c: c,
 	}
@@ -666,10 +696,12 @@ func (*handlerSuite) TestHandlersRootFuncWithIncompatibleRequestArg(c *gc.C) {
 	}
 	c.Assert(func() {
 		testServer.Handlers(f)
-	}, gc.PanicMatches, `bad type for method M1: argument of type \*struct {.*} does not implement interface required by root handler interface \{ Foo\(\) \}`)
+	}, qt.PanicMatches, `bad type for method M1: argument of type \*struct {.*} does not implement interface required by root handler interface \{ Foo\(\) \}`)
 }
 
-func (*handlerSuite) TestHandlersRootFuncWithNonEmptyInterfaceRequestArg(c *gc.C) {
+func TestHandlersRootFuncWithNonEmptyInterfaceRequestArg(t *testing.T) {
+	c := qt.New(t)
+
 	type tester interface {
 		Test() string
 	}
@@ -682,12 +714,12 @@ func (*handlerSuite) TestHandlersRootFuncWithNonEmptyInterfaceRequestArg(c *gc.C
 	for _, h := range testServer.Handlers(f) {
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+	qthttptest.AssertJSONCall(c, qthttptest.JSONCallParams{
 		Handler:    router,
 		URL:        "/x1/something",
 		ExpectBody: "something",
 	})
-	c.Assert(argResult, jc.DeepEquals, "test something")
+	c.Assert(argResult, qt.DeepEquals, "test something")
 }
 
 var badHandlersFuncTests = []struct {
@@ -783,16 +815,22 @@ func (badHandlersType3) M(arg *struct {
 func (badHandlersType3) Close() {
 }
 
-func (*handlerSuite) TestBadHandlersFunc(c *gc.C) {
-	for i, test := range badHandlersFuncTests {
-		c.Logf("test %d: %s", i, test.about)
-		c.Check(func() {
-			testServer.Handlers(test.f)
-		}, gc.PanicMatches, test.expectPanic)
+func TestBadHandlersFunc(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range badHandlersFuncTests {
+		test := test
+		c.Run(test.about, func(c *qt.C) {
+			c.Check(func() {
+				testServer.Handlers(test.f)
+			}, qt.PanicMatches, test.expectPanic)
+		})
 	}
 }
 
-func (*handlerSuite) TestHandlersFuncReturningError(c *gc.C) {
+func TestHandlersFuncReturningError(t *testing.T) {
+	c := qt.New(t)
+
 	handlers := testServer.Handlers(func(p httprequest.Params) (*testHandlers, context.Context, error) {
 		return nil, p.Context, errgo.WithCausef(errgo.New("failure"), errUnauth, "something")
 	})
@@ -800,7 +838,7 @@ func (*handlerSuite) TestHandlersFuncReturningError(c *gc.C) {
 	for _, h := range handlers {
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+	qthttptest.AssertJSONCall(c, qthttptest.JSONCallParams{
 		URL:          "/m1/99",
 		Handler:      router,
 		ExpectStatus: http.StatusUnauthorized,
@@ -811,7 +849,9 @@ func (*handlerSuite) TestHandlersFuncReturningError(c *gc.C) {
 	})
 }
 
-func (*handlerSuite) TestHandlersFuncReturningCustomContext(c *gc.C) {
+func TestHandlersFuncReturningCustomContext(t *testing.T) {
+	c := qt.New(t)
+
 	handleVal := testHandlers{
 		c: c,
 	}
@@ -824,12 +864,12 @@ func (*handlerSuite) TestHandlersFuncReturningCustomContext(c *gc.C) {
 	for _, h := range handlers {
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+	qthttptest.AssertJSONCall(c, qthttptest.JSONCallParams{
 		URL:     "/m1/99",
 		Handler: router,
 	})
-	c.Assert(handleVal.calledContext, gc.NotNil)
-	c.Assert(handleVal.calledContext.Value("some key"), gc.Equals, "some value")
+	c.Assert(handleVal.calledContext, qt.Not(qt.IsNil))
+	c.Assert(handleVal.calledContext.Value("some key"), qt.Equals, "some value")
 }
 
 type closeHandlersType struct {
@@ -849,7 +889,9 @@ func (h *closeHandlersType) Close() error {
 	return nil
 }
 
-func (*handlerSuite) TestHandlersWithTypeThatImplementsIOCloser(c *gc.C) {
+func TestHandlersWithTypeThatImplementsIOCloser(t *testing.T) {
+	c := qt.New(t)
+
 	var v closeHandlersType
 	handlers := testServer.Handlers(func(p httprequest.Params) (*closeHandlersType, context.Context, error) {
 		return &v, p.Context, nil
@@ -858,29 +900,33 @@ func (*handlerSuite) TestHandlersWithTypeThatImplementsIOCloser(c *gc.C) {
 	for _, h := range handlers {
 		router.Handle(h.Method, h.Path, h.Handle)
 	}
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+	qthttptest.AssertJSONCall(c, qthttptest.JSONCallParams{
 		URL:     "/m1/99",
 		Handler: router,
 	})
-	c.Assert(v.closed, gc.Equals, true)
-	c.Assert(v.p, gc.Equals, 99)
+	c.Assert(v.closed, qt.Equals, true)
+	c.Assert(v.p, qt.Equals, 99)
 }
 
-func (*handlerSuite) TestBadForm(c *gc.C) {
+func TestBadForm(t *testing.T) {
+	c := qt.New(t)
+
 	h := testServer.Handle(func(p httprequest.Params, _ *struct{}) {
 		c.Fatalf("shouldn't be called")
 	})
 	testBadForm(c, h.Handle)
 }
 
-func (*handlerSuite) TestBadFormNoParams(c *gc.C) {
+func TestBadFormNoParams(t *testing.T) {
+	c := qt.New(t)
+
 	h := testServer.Handle(func(_ *struct{}) {
 		c.Fatalf("shouldn't be called")
 	})
 	testBadForm(c, h.Handle)
 }
 
-func testBadForm(c *gc.C, h httprouter.Handle) {
+func testBadForm(c *qt.C, h httprouter.Handle) {
 	rec := httptest.NewRecorder()
 	req := &http.Request{
 		Method: "POST",
@@ -890,16 +936,18 @@ func testBadForm(c *gc.C, h httprouter.Handle) {
 		Body: body("%6"),
 	}
 	h(rec, req, httprouter.Params{})
-	httptesting.AssertJSONResponse(c, rec, http.StatusBadRequest, httprequest.RemoteError{
+	qthttptest.AssertJSONResponse(c, rec, http.StatusBadRequest, httprequest.RemoteError{
 		Message: `cannot parse HTTP request form: invalid URL escape "%6"`,
 		Code:    "bad request",
 	})
 }
 
-func (*handlerSuite) TestToHTTP(c *gc.C) {
+func TestToHTTP(t *testing.T) {
+	c := qt.New(t)
+
 	var h http.Handler
 	h = httprequest.ToHTTP(testServer.Handle(func(p httprequest.Params, s *struct{}) {
-		c.Assert(p.PathVar, gc.IsNil)
+		c.Assert(p.PathVar, qt.IsNil)
 		p.Response.WriteHeader(http.StatusOK)
 	}).Handle)
 	rec := httptest.NewRecorder()
@@ -907,19 +955,21 @@ func (*handlerSuite) TestToHTTP(c *gc.C) {
 		Body: body(""),
 	}
 	h.ServeHTTP(rec, req)
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Code, qt.Equals, http.StatusOK)
 }
 
-func (*handlerSuite) TestWriteJSON(c *gc.C) {
+func TestWriteJSON(t *testing.T) {
+	c := qt.New(t)
+
 	rec := httptest.NewRecorder()
 	type Number struct {
 		N int
 	}
 	err := httprequest.WriteJSON(rec, http.StatusTeapot, Number{1234})
-	c.Assert(err, gc.IsNil)
-	c.Assert(rec.Code, gc.Equals, http.StatusTeapot)
-	c.Assert(rec.Body.String(), gc.Equals, `{"N":1234}`)
-	c.Assert(rec.Header().Get("content-type"), gc.Equals, "application/json")
+	c.Assert(err, qt.IsNil)
+	c.Assert(rec.Code, qt.Equals, http.StatusTeapot)
+	c.Assert(rec.Body.String(), qt.Equals, `{"N":1234}`)
+	c.Assert(rec.Header().Get("content-type"), qt.Equals, "application/json")
 }
 
 var (
@@ -939,14 +989,16 @@ func (HeaderNumber) SetHeader(h http.Header) {
 	h.Add("some-custom-header", "yes")
 }
 
-func (*handlerSuite) TestSetHeader(c *gc.C) {
+func TestSetHeader(t *testing.T) {
+	c := qt.New(t)
+
 	rec := httptest.NewRecorder()
 	err := httprequest.WriteJSON(rec, http.StatusTeapot, HeaderNumber{1234})
-	c.Assert(err, gc.IsNil)
-	c.Assert(rec.Code, gc.Equals, http.StatusTeapot)
-	c.Assert(rec.Body.String(), gc.Equals, `{"N":1234}`)
-	c.Assert(rec.Header().Get("content-type"), gc.Equals, "application/json")
-	c.Assert(rec.Header().Get("some-custom-header"), gc.Equals, "yes")
+	c.Assert(err, qt.Equals, nil)
+	c.Assert(rec.Code, qt.Equals, http.StatusTeapot)
+	c.Assert(rec.Body.String(), qt.Equals, `{"N":1234}`)
+	c.Assert(rec.Header().Get("content-type"), qt.Equals, "application/json")
+	c.Assert(rec.Header().Get("some-custom-header"), qt.Equals, "yes")
 }
 
 var testServer = httprequest.Server{
@@ -984,7 +1036,7 @@ var writeErrorTests = []struct {
 	about          string
 	err            error
 	srv            httprequest.Server
-	assertResponse func(c *gc.C, rec *httptest.ResponseRecorder)
+	assertResponse func(c *qt.C, rec *httptest.ResponseRecorder)
 	expectStatus   int
 	expectResp     *httprequest.RemoteError
 	expectHeader   http.Header
@@ -1128,9 +1180,9 @@ var writeErrorTests = []struct {
 			fmt.Fprintf(w, "custom error")
 		},
 	},
-	assertResponse: func(c *gc.C, rec *httptest.ResponseRecorder) {
-		c.Assert(rec.Body.String(), gc.Equals, "custom error")
-		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	assertResponse: func(c *qt.C, rec *httptest.ResponseRecorder) {
+		c.Assert(rec.Body.String(), qt.Equals, "custom error")
+		c.Assert(rec.Code, qt.Equals, http.StatusOK)
 	},
 }, {
 	about: "error writer overrides error mapper",
@@ -1143,65 +1195,73 @@ var writeErrorTests = []struct {
 			return http.StatusInternalServerError, nil
 		},
 	},
-	assertResponse: func(c *gc.C, rec *httptest.ResponseRecorder) {
-		c.Assert(rec.Body.String(), gc.Equals, "custom error")
-		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	assertResponse: func(c *qt.C, rec *httptest.ResponseRecorder) {
+		c.Assert(rec.Body.String(), qt.Equals, "custom error")
+		c.Assert(rec.Code, qt.Equals, http.StatusOK)
 	},
 }}
 
-func (s *handlerSuite) TestErrorfWithEmptyMessage(c *gc.C) {
+func TestErrorfWithEmptyMessage(t *testing.T) {
+	c := qt.New(t)
+
 	err := httprequest.Errorf(httprequest.CodeNotFound, "")
-	c.Assert(err, jc.DeepEquals, &httprequest.RemoteError{
+	c.Assert(err, qt.DeepEquals, &httprequest.RemoteError{
 		Message: httprequest.CodeNotFound,
 		Code:    httprequest.CodeNotFound,
 	})
 }
 
-func (s *handlerSuite) TestWriteError(c *gc.C) {
-	for i, test := range writeErrorTests {
-		c.Logf("%d: %s", i, test.err)
-		rec := httptest.NewRecorder()
-		test.srv.WriteError(context.TODO(), rec, test.err)
-		test.assertResponse(c, rec)
+func TestWriteError(t *testing.T) {
+	c := qt.New(t)
+
+	for _, test := range writeErrorTests {
+		test := test
+		c.Run(test.err.Error(), func(c *qt.C) {
+			rec := httptest.NewRecorder()
+			test.srv.WriteError(context.TODO(), rec, test.err)
+			test.assertResponse(c, rec)
+		})
 	}
 }
 
-func (s *handlerSuite) TestHandleErrors(c *gc.C) {
+func TestHandleErrors(t *testing.T) {
+	c := qt.New(t)
+
 	req := new(http.Request)
 	params := httprouter.Params{}
 	// Test when handler returns an error.
 	handler := testServer.HandleErrors(func(p httprequest.Params) error {
-		assertRequestEquals(c, p.Request, req)
-		c.Assert(p.PathVar, jc.DeepEquals, params)
-		c.Assert(p.PathPattern, gc.Equals, "")
+		c.Assert(p.Request, requestEquals, req)
+		c.Assert(p.PathVar, qt.DeepEquals, params)
+		c.Assert(p.PathPattern, qt.Equals, "")
 		ctx := p.Context
-		c.Assert(ctx, gc.Not(gc.IsNil))
+		c.Assert(ctx, qt.Not(qt.IsNil))
 		return errUnauth
 	})
 	rec := httptest.NewRecorder()
 	handler(rec, req, params)
-	c.Assert(rec.Code, gc.Equals, http.StatusUnauthorized)
+	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
 	resp := parseErrorResponse(c, rec.Body.Bytes())
-	c.Assert(resp, gc.DeepEquals, &httprequest.RemoteError{
+	c.Assert(resp, qt.DeepEquals, &httprequest.RemoteError{
 		Message: errUnauth.Error(),
 		Code:    "unauthorized",
 	})
 
 	// Test when handler returns nil.
 	handler = testServer.HandleErrors(func(p httprequest.Params) error {
-		assertRequestEquals(c, p.Request, req)
-		c.Assert(p.PathVar, jc.DeepEquals, params)
-		c.Assert(p.PathPattern, gc.Equals, "")
+		c.Assert(p.Request, requestEquals, req)
+		c.Assert(p.PathVar, qt.DeepEquals, params)
+		c.Assert(p.PathPattern, qt.Equals, "")
 		ctx := p.Context
-		c.Assert(ctx, gc.Not(gc.IsNil))
+		c.Assert(ctx, qt.Not(qt.IsNil))
 		p.Response.WriteHeader(http.StatusCreated)
 		p.Response.Write([]byte("something"))
 		return nil
 	})
 	rec = httptest.NewRecorder()
 	handler(rec, req, params)
-	c.Assert(rec.Code, gc.Equals, http.StatusCreated)
-	c.Assert(rec.Body.String(), gc.Equals, "something")
+	c.Assert(rec.Code, qt.Equals, http.StatusCreated)
+	c.Assert(rec.Body.String(), qt.Equals, "something")
 }
 
 var handleErrorsWithErrorAfterWriteHeaderTests = []struct {
@@ -1224,7 +1284,9 @@ var handleErrorsWithErrorAfterWriteHeaderTests = []struct {
 	},
 }}
 
-func (s *handlerSuite) TestHandleErrorsWithErrorAfterWriteHeader(c *gc.C) {
+func TestHandleErrorsWithErrorAfterWriteHeader(t *testing.T) {
+	c := qt.New(t)
+
 	for i, test := range handleErrorsWithErrorAfterWriteHeaderTests {
 		c.Logf("test %d: %s", i, test.about)
 		handler := testServer.HandleErrors(func(p httprequest.Params) error {
@@ -1233,66 +1295,48 @@ func (s *handlerSuite) TestHandleErrorsWithErrorAfterWriteHeader(c *gc.C) {
 		})
 		rec := httptest.NewRecorder()
 		handler(rec, new(http.Request), nil)
-		c.Assert(rec.Code, gc.Equals, http.StatusOK)
-		c.Assert(rec.Body.String(), gc.Equals, "")
+		c.Assert(rec.Code, qt.Equals, http.StatusOK)
+		c.Assert(rec.Body.String(), qt.Equals, "")
 	}
 }
 
-func (s *handlerSuite) TestHandleJSON(c *gc.C) {
+func TestHandleJSON(t *testing.T) {
+	c := qt.New(t)
+
 	req := new(http.Request)
 	params := httprouter.Params{}
 	// Test when handler returns an error.
 	handler := testServer.HandleJSON(func(p httprequest.Params) (interface{}, error) {
-		assertRequestEquals(c, p.Request, req)
-		c.Assert(p.PathVar, jc.DeepEquals, params)
-		c.Assert(p.PathPattern, gc.Equals, "")
+		c.Assert(p.Request, requestEquals, req)
+		c.Assert(p.PathVar, qt.DeepEquals, params)
+		c.Assert(p.PathPattern, qt.Equals, "")
 		return nil, errUnauth
 	})
 	rec := httptest.NewRecorder()
 	handler(rec, new(http.Request), params)
 	resp := parseErrorResponse(c, rec.Body.Bytes())
-	c.Assert(resp, gc.DeepEquals, &httprequest.RemoteError{
+	c.Assert(resp, qt.DeepEquals, &httprequest.RemoteError{
 		Message: errUnauth.Error(),
 		Code:    "unauthorized",
 	})
-	c.Assert(rec.Code, gc.Equals, http.StatusUnauthorized)
+	c.Assert(rec.Code, qt.Equals, http.StatusUnauthorized)
 
 	// Test when handler returns a body.
 	handler = testServer.HandleJSON(func(p httprequest.Params) (interface{}, error) {
-		assertRequestEquals(c, p.Request, req)
-		c.Assert(p.PathVar, jc.DeepEquals, params)
-		c.Assert(p.PathPattern, gc.Equals, "")
+		c.Assert(p.Request, requestEquals, req)
+		c.Assert(p.PathVar, qt.DeepEquals, params)
+		c.Assert(p.PathPattern, qt.Equals, "")
 		p.Response.Header().Set("Some-Header", "value")
 		return "something", nil
 	})
 	rec = httptest.NewRecorder()
 	handler(rec, req, params)
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.String(), gc.Equals, `"something"`)
-	c.Assert(rec.Header().Get("Some-Header"), gc.Equals, "value")
+	c.Assert(rec.Code, qt.Equals, http.StatusOK)
+	c.Assert(rec.Body.String(), qt.Equals, `"something"`)
+	c.Assert(rec.Header().Get("Some-Header"), qt.Equals, "value")
 }
 
-func assertRequestEquals(c *gc.C, req1, req2 *http.Request) {
-	c.Assert(req1.Method, gc.Equals, req2.Method)
-	c.Assert(req1.URL, jc.DeepEquals, req2.URL)
-	c.Assert(req1.Proto, gc.Equals, req2.Proto)
-	c.Assert(req1.ProtoMajor, gc.Equals, req2.ProtoMajor)
-	c.Assert(req1.ProtoMinor, gc.Equals, req2.ProtoMinor)
-	c.Assert(req1.Header, jc.DeepEquals, req2.Header)
-	c.Assert(req1.Body, gc.Equals, req2.Body)
-	c.Assert(req1.ContentLength, gc.Equals, req2.ContentLength)
-	c.Assert(req1.TransferEncoding, jc.DeepEquals, req2.TransferEncoding)
-	c.Assert(req1.Close, gc.Equals, req2.Close)
-	c.Assert(req1.Host, gc.Equals, req2.Host)
-	c.Assert(req1.Form, jc.DeepEquals, req2.Form)
-	c.Assert(req1.PostForm, jc.DeepEquals, req2.PostForm)
-	c.Assert(req1.MultipartForm, jc.DeepEquals, req2.MultipartForm)
-	c.Assert(req1.Trailer, jc.DeepEquals, req2.Trailer)
-	c.Assert(req1.RemoteAddr, gc.Equals, req2.RemoteAddr)
-	c.Assert(req1.RequestURI, gc.Equals, req2.RequestURI)
-	c.Assert(req1.TLS, gc.Equals, req2.TLS)
-	c.Assert(req1.Cancel, gc.Equals, req2.Cancel)
-}
+var requestEquals = qt.CmpEquals(cmpopts.IgnoreUnexported(http.Request{}))
 
 type handlersWithRequestMethod struct{}
 
@@ -1309,22 +1353,22 @@ func (h *handlersWithRequestMethod) X1(arg *x1Request) (string, error) {
 	return arg.P, nil
 }
 
-func assertErrorResponse(code int, body interface{}, header http.Header) func(c *gc.C, rec *httptest.ResponseRecorder) {
-	return func(c *gc.C, rec *httptest.ResponseRecorder) {
+func assertErrorResponse(code int, body interface{}, header http.Header) func(c *qt.C, rec *httptest.ResponseRecorder) {
+	return func(c *qt.C, rec *httptest.ResponseRecorder) {
 		resp := reflect.New(reflect.ValueOf(body).Type())
 		err := json.Unmarshal(rec.Body.Bytes(), resp.Interface())
-		c.Assert(err, gc.IsNil)
-		c.Assert(resp.Elem().Interface(), gc.DeepEquals, body)
-		c.Assert(rec.Code, gc.Equals, code)
+		c.Assert(err, qt.Equals, nil)
+		c.Assert(resp.Elem().Interface(), qt.DeepEquals, body)
+		c.Assert(rec.Code, qt.Equals, code)
 		for name, vals := range header {
-			c.Assert(rec.HeaderMap[name], jc.DeepEquals, vals)
+			c.Assert(rec.HeaderMap[name], qt.DeepEquals, vals)
 		}
 	}
 }
 
-func parseErrorResponse(c *gc.C, body []byte) *httprequest.RemoteError {
+func parseErrorResponse(c *qt.C, body []byte) *httprequest.RemoteError {
 	var errResp *httprequest.RemoteError
 	err := json.Unmarshal(body, &errResp)
-	c.Assert(err, gc.IsNil)
+	c.Assert(err, qt.Equals, nil)
 	return errResp
 }
