@@ -2,10 +2,25 @@
 --
     import "gopkg.in/httprequest.v1"
 
-Package httprequest provides functionality for unmarshaling HTTP request
-parameters into a struct type.
+Package httprequest provides functionality for marshaling unmarshaling HTTP
+request parameters into a struct type. It also provides a way to define methods
+as HTTP routes using the same approach.
+
+It requires at least Go 1.7, and Go 1.9 is required if the importing program
+also uses golang.org/x/net/context.
 
 ## Usage
+
+```go
+const (
+	CodeBadRequest   = "bad request"
+	CodeUnauthorized = "unauthorized"
+	CodeForbidden    = "forbidden"
+	CodeNotFound     = "not found"
+)
+```
+These constants are recognized by DefaultErrorMapper as mapping to the similarly
+named HTTP status codes.
 
 ```go
 var (
@@ -13,6 +28,15 @@ var (
 	ErrBadUnmarshalType = errgo.New("httprequest bad unmarshal type")
 )
 ```
+
+```go
+var DefaultErrorMapper = defaultErrorMapper
+```
+DefaultErrorMapper is used by Server when ErrorMapper is nil. It maps all errors
+to RemoteError instances; if an error implements the ErrorCoder interface, the
+Code field will be set accordingly; some codes will map to specific HTTP status
+codes (for example, if ErrorCode returns CodeBadRequest, the resulting HTTP
+status will be http.StatusBadRequest).
 
 ```go
 var DefaultErrorUnmarshaler = ErrorUnmarshaler(new(RemoteError))
@@ -68,7 +92,16 @@ directly; otherwise if implements encoding.TextMarshaler, that will be used to
 marshal the field, otherwise fmt.Sprint will be used.
 
 An "omitempty" attribute on a form or header field specifies that if the form or
-header value is empty, the form or header entry will be omitted.
+header value is zero, the form or header entry will be omitted. If the field is
+a nil pointer, it will be omitted; otherwise if the field type implements
+IsZeroer, that method will be used to determine whether the value is zero,
+otherwise if the value is comparable, it will be compared with the zero value
+for its type, otherwise the value will never be omitted. One notable
+implementation of IsZeroer is time.Time.
+
+An "inbody" attribute on a form field specifies that the field will be marshaled
+as part of an application/x-www-form-urlencoded body. Note that the field may
+still be unmarshaled from either a URL query parameter or a form-encoded body.
 
 For example, this code:
 
@@ -82,7 +115,7 @@ For example, this code:
         Extra string `httprequest:"context,form,omitempty"`
         Details UserDetails `httprequest:",body"`
     }
-    req, err := Marshal("GET", "http://example.com/users/:user/details", &Test{
+    req, err := Marshal("http://example.com/users/:user/details", "GET", &Test{
         Username: "bob",
         ContextId: 1234,
         Details: UserDetails{
@@ -388,6 +421,17 @@ type DoerWithContext interface {
 DoerWithContext is implemented by HTTP clients that can use a context with the
 HTTP request.
 
+#### type ErrorCoder
+
+```go
+type ErrorCoder interface {
+	ErrorCode() string
+}
+```
+
+ErrorCoder may be implemented by an error to cause it to return a particular
+RemoteError code when DefaultErrorMapper is used.
+
 #### type ErrorHandler
 
 ```go
@@ -422,6 +466,16 @@ type HeaderSetter interface {
 HeaderSetter is the interface checked for by WriteJSON. If implemented on a
 value passed to WriteJSON, the SetHeader method will be called to allow it to
 set custom headers on the response.
+
+#### type IsZeroer
+
+```go
+type IsZeroer interface {
+	IsZero() bool
+}
+```
+
+IsZeroer is used when marshaling to determine if a value is zero (see Marshal).
 
 #### type JSONHandler
 
@@ -469,7 +523,17 @@ type RemoteError struct {
 ```
 
 RemoteError holds the default type of a remote error used by Client when no
-custom error unmarshaler is set.
+custom error unmarshaler is set. This type is also used by DefaultErrorMapper to
+marshal errors in Server.
+
+#### func  Errorf
+
+```go
+func Errorf(code string, f string, a ...interface{}) *RemoteError
+```
+Errorf returns a new RemoteError instance that uses the given code and formats
+the message with fmt.Sprintf(f, a...). If f is empty and there are no other
+arguments, code will also be used for the message.
 
 #### func (*RemoteError) Error
 
@@ -477,6 +541,13 @@ custom error unmarshaler is set.
 func (e *RemoteError) Error() string
 ```
 Error implements the error interface.
+
+#### func (*RemoteError) ErrorCode
+
+```go
+func (e *RemoteError) ErrorCode() string
+```
+ErrorCode implements ErrorCoder by returning e.Code.
 
 #### type Route
 
@@ -498,7 +569,16 @@ type Server struct {
 	//
 	// If the returned errorBody implements HeaderSetter, then
 	// that method will be called to add custom headers to the request.
+	//
+	// If this both this and ErrorWriter are nil, DefaultErrorMapper will be used.
 	ErrorMapper func(ctxt context.Context, err error) (httpStatus int, errorBody interface{})
+
+	// ErrorWriter is a more general form of ErrorMapper. If this
+	// field is set, ErrorMapper will be ignored and any returned
+	// errors will be passed to ErrorWriter, which should use
+	// w to set the HTTP status and write an appropriate
+	// error response.
+	ErrorWriter func(ctx context.Context, w http.ResponseWriter, err error)
 }
 ```
 
@@ -566,10 +646,10 @@ response. If handle returns an error, it is passed through the error mapper.
 Note that the Params argument passed to handle will not have its PathPattern set
 as that information is not available.
 
-#### func (Server) Handlers
+#### func (*Server) Handlers
 
 ```go
-func (srv Server) Handlers(f interface{}) []Handler
+func (srv *Server) Handlers(f interface{}) []Handler
 ```
 Handlers returns a list of handlers that will be handled by the value returned
 by the given argument, which must be a function in one of the following forms:
@@ -578,15 +658,13 @@ by the given argument, which must be a function in one of the following forms:
     func(p httprequest.Params, handlerArg I) (T, context.Context, error)
 
 for some type T and some interface type I. Each exported method defined on T
-defines a handler, and should be in one of the forms accepted by
-ErrorMapper.Handle with the additional constraint that the argument to each of
-the handlers must be compatible with the type I when the second form is used
-above.
+defines a handler, and should be in one of the forms accepted by Server.Handle
+with the additional constraint that the argument to each of the handlers must be
+compatible with the type I when the second form is used above.
 
 The returned context will be used as the value of Params.Context when Params is
 passed to any method. It will also be used when writing an error if the function
-returns an error. Note that it is OK to use both the standard library
-context.Context or golang.org/x/net/context.Context in the context return value.
+returns an error.
 
 Handlers will panic if f is not of the required form, no methods are defined on
 T or any method defined on T is not suitable for Handle.
@@ -604,7 +682,8 @@ completed.
 ```go
 func (srv *Server) WriteError(ctx context.Context, w http.ResponseWriter, err error)
 ```
-WriteError writes an error to a ResponseWriter and sets the HTTP status code.
+WriteError writes an error to a ResponseWriter and sets the HTTP status code,
+using srv.ErrorMapper to determine the actually written response.
 
 It uses WriteJSON to write the error body returned from the ErrorMapper so it is
 possible to add custom headers to the HTTP error response by implementing

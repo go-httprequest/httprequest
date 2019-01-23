@@ -11,12 +11,11 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
-
-	"go/types"
 
 	"golang.org/x/tools/go/packages"
 	"gopkg.in/errgo.v1"
@@ -169,9 +168,9 @@ func serverMethods(serverPkg, serverType, localPkg string) ([]method, []string, 
 	ptrObjType := types.NewPointer(objTypeName.Type())
 
 	imports := map[string]string{
-		"gopkg.in/httprequest.v1":  "httprequest",
-		"golang.org/x/net/context": "context",
-		localPkg:                   "",
+		"gopkg.in/httprequest.v1": "httprequest",
+		"context":                 "context",
+		localPkg:                  "",
 	}
 	var methods []method
 	mset := types.NewMethodSet(ptrObjType)

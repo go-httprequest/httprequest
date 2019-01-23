@@ -5,6 +5,7 @@ package httprequest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +15,6 @@ import (
 	"reflect"
 	"strings"
 
-	"golang.org/x/net/context"
 	"gopkg.in/errgo.v1"
 )
 
@@ -141,7 +141,7 @@ func (c *Client) Do(ctx context.Context, req *http.Request, resp interface{}) er
 	if ctxDoer, ok := doer.(DoerWithContext); ok {
 		httpResp, err = ctxDoer.DoWithContext(ctx, req)
 	} else {
-		httpResp, err = doer.Do(requestWithContext(req, ctx))
+		httpResp, err = doer.Do(req.WithContext(ctx))
 	}
 	if err != nil {
 		return errgo.Mask(urlError(err, req), errgo.Any)
