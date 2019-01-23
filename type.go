@@ -1,11 +1,17 @@
 // Copyright 2015 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
-// Package httprequest provides functionality for unmarshaling
-// HTTP request parameters into a struct type.
+// Package httprequest provides functionality for marshaling
+// unmarshaling HTTP request parameters into a struct type.
+// It also provides a way to define methods as HTTP routes
+// using the same approach.
+//
+// It requires at least Go 1.7, and Go 1.9 is required if the importing
+// program also uses golang.org/x/net/context.
 package httprequest
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -14,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
 	"gopkg.in/errgo.v1"
 )
 

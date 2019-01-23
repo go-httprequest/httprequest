@@ -1,6 +1,7 @@
 package httprequest_test
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,8 +13,6 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/julienschmidt/httprouter"
-	"golang.org/x/net/context"
-	"golang.org/x/net/context/ctxhttp"
 	"gopkg.in/errgo.v1"
 
 	"gopkg.in/httprequest.v1"
@@ -109,7 +108,7 @@ var callTests = []struct {
 			if ctx == nil {
 				panic("Do called when DoWithContext expected")
 			}
-			return ctxhttp.Do(ctx, http.DefaultClient, req)
+			return http.DefaultClient.Do(req.WithContext(ctx))
 		}),
 	},
 	req: &chM2Req{
@@ -124,7 +123,7 @@ var callTests = []struct {
 			if ctx == nil {
 				panic("Do called when DoWithContext expected")
 			}
-			return ctxhttp.Do(ctx, http.DefaultClient, req)
+			return http.DefaultClient.Do(req.WithContext(ctx))
 		}),
 	},
 	req: &chM2Req{
@@ -139,7 +138,7 @@ var callTests = []struct {
 			if ctx == nil {
 				panic("Do called when DoWithContext expected")
 			}
-			return ctxhttp.Do(ctx, http.DefaultClient, req)
+			return http.DefaultClient.Do(req.WithContext(ctx))
 		}),
 	},
 	req: &chM1Req{
@@ -254,7 +253,7 @@ var doTests = []struct {
 			if ctx == nil {
 				panic("Do called when DoWithContext expected")
 			}
-			return ctxhttp.Do(ctx, http.DefaultClient, req)
+			return http.DefaultClient.Do(req.WithContext(ctx))
 		}),
 	},
 	request:    mustNewRequest("/m2/foo", "POST", strings.NewReader(`{"I": 999}`)),
