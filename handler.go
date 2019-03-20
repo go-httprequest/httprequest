@@ -12,7 +12,7 @@ import (
 	"reflect"
 
 	"github.com/julienschmidt/httprouter"
-	"gopkg.in/errgo.v1"
+	errgo "gopkg.in/errgo.v1"
 )
 
 // Server represents the server side of an HTTP servers, and can be
@@ -439,10 +439,11 @@ func (srv *Server) handlerResponder(ft reflect.Type) func(p Params, outv []refle
 }
 
 // ToHTTP converts an httprouter.Handle into an http.Handler.
-// It will pass no path variables to h.
+// It will pass any path variables found in the request context
+// through to h.
 func ToHTTP(h httprouter.Handle) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		h(w, req, nil)
+		h(w, req, httprouter.ParamsFromContext(req.Context()))
 	})
 }
 

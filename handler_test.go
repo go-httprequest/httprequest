@@ -18,9 +18,9 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/juju/qthttptest"
 	"github.com/julienschmidt/httprouter"
-	"gopkg.in/errgo.v1"
+	errgo "gopkg.in/errgo.v1"
 
-	"gopkg.in/httprequest.v1"
+	httprequest "gopkg.in/httprequest.v1"
 )
 
 type customError struct {
@@ -945,9 +945,8 @@ func testBadForm(c *qt.C, h httprouter.Handle) {
 func TestToHTTP(t *testing.T) {
 	c := qt.New(t)
 
-	var h http.Handler
-	h = httprequest.ToHTTP(testServer.Handle(func(p httprequest.Params, s *struct{}) {
-		c.Assert(p.PathVar, qt.IsNil)
+	h := httprequest.ToHTTP(testServer.Handle(func(p httprequest.Params, s *struct{}) {
+		c.Check(p.PathVar, qt.IsNil)
 		p.Response.WriteHeader(http.StatusOK)
 	}).Handle)
 	rec := httptest.NewRecorder()
@@ -956,6 +955,26 @@ func TestToHTTP(t *testing.T) {
 	}
 	h.ServeHTTP(rec, req)
 	c.Assert(rec.Code, qt.Equals, http.StatusOK)
+}
+
+func TestToHTTPPreservesParams(t *testing.T) {
+	c := qt.New(t)
+
+	rh := testServer.Handle(func(p httprequest.Params, s *struct {
+		httprequest.Route `httprequest:"GET /x/:p1/:p2"`
+		P1                int    `httprequest:"p1,path"`
+		P2                string `httprequest:"p2,path"`
+	}) {
+		c.Check(s.P1, qt.Equals, 99)
+		c.Check(s.P2, qt.Equals, "foo")
+		p.Response.WriteHeader(http.StatusTeapot)
+	})
+	router := httprouter.New()
+	router.Handle(rh.Method, rh.Path, rh.Handle)
+	rec := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "http://0.1.2.3/x/99/foo", nil)
+	router.ServeHTTP(rec, req)
+	c.Assert(rec.Code, qt.Equals, http.StatusTeapot)
 }
 
 func TestWriteJSON(t *testing.T) {

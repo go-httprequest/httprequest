@@ -6,6 +6,8 @@ github.com/juju/qthttptest v0.0.1 h1:pR8nTl6Uo/iI6/ynQf5Cxy9FEICXzaa83NtrBdGMCVQ
 github.com/juju/qthttptest v0.0.1/go.mod h1://LCf/Ls22/rPw2u1yWukUJvYtfPY4nYpWUl2uZhryo=
 github.com/julienschmidt/httprouter v0.0.0-20151013225520-77a895ad01eb h1:a8sYyruWLyKeMay8GPF+nwZ36xT7A0oNyn68Q6wJ5cc=
 github.com/julienschmidt/httprouter v0.0.0-20151013225520-77a895ad01eb/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
+github.com/julienschmidt/httprouter v1.2.0 h1:TDTW5Yz1mjftljbcKqRcrYhd4XeOoI98t+9HbQbYf7g=
+github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
