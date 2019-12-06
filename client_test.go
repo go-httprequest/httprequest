@@ -71,9 +71,11 @@ var callTests = []struct {
 	req:         &chM3Req{},
 	expectError: `Get http://.*/m3: unexpected HTTP response status: 500 Internal Server Error`,
 }, {
-	about:       "unexpected redirect",
-	req:         &chM2RedirectM2Req{},
-	expectError: `Post http://.*/m2/foo//: unexpected redirect \(status 307 Temporary Redirect\) from "http://.*/m2/foo//" to "http://.*/m2/foo"`,
+	about: "unexpected redirect",
+	req: &chM2RedirectM2Req{
+		Body: struct{ I int }{999},
+	},
+	expectResp: &chM2Resp{"foo", 999},
 }, {
 	about:       "bad content in successful response",
 	req:         &chM4Req{},
@@ -236,7 +238,7 @@ var doTests = []struct {
 	client: httprequest.Client{
 		BaseURL: ":::",
 	},
-	expectError: `cannot parse ":::": parse :::: missing protocol scheme`,
+	expectError: `cannot parse ":::": parse "?:::"?: missing protocol scheme`,
 }, {
 	about: "Do returns error",
 	client: httprequest.Client{
@@ -705,6 +707,9 @@ type chInvalidM2Req struct {
 
 type chM2RedirectM2Req struct {
 	httprequest.Route `httprequest:"POST /m2/foo//"`
+	Body              struct {
+		I int
+	} `httprequest:",body"`
 }
 
 type chM2Resp struct {

@@ -358,7 +358,7 @@ var marshalTests = []struct {
 	}{
 		F1: "test",
 	},
-	expectError: `parse %%: invalid URL escape \"%%\"`,
+	expectError: `parse \"?%%\"?: invalid URL escape \"%%\"`,
 }, {
 	about:     "value cannot be marshaled to json",
 	urlString: "http://localhost",
