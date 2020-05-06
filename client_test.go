@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -490,21 +491,63 @@ func TestUnmarshalJSONResponseWithBodyReadError(t *testing.T) {
 	assertDecodeResponseError(c, err, http.StatusOK, `{"one": "two"}`)
 }
 
-func TestUnmarshalJSONResponseWithBadContentType(t *testing.T) {
+var unmarshalJSONResponseWithVariedJSONContentTypesTests = []struct {
+	contentType string
+	expectError bool
+}{{
+	contentType: "application/json",
+}, {
+	contentType: "application/json+other",
+}, {
+	contentType: "application/vnd.schemaregistry.v1+json",
+}, {
+	contentType: "other/json",
+	expectError: true,
+}, {
+	contentType: "other/jsonx",
+	expectError: true,
+}, {
+	contentType: "other/xjson",
+	expectError: true,
+}, {
+	contentType: "other/other+xjson",
+	expectError: true,
+}, {
+	contentType: "other/other+jsonx",
+	expectError: true,
+}, {
+	contentType: "application/other+json+foo",
+}, {
+	contentType: "application/other+json",
+}, {
+	contentType: "application/other+json+",
+}, {
+	contentType: "application/+json+",
+}}
+
+func TestUnmarshalJSONResponseWithVariedJSONContentTypes(t *testing.T) {
 	c := qt.New(t)
 
-	resp := &http.Response{
-		Header: http.Header{
-			"Content-Type": {"foo/bar"},
-		},
-		StatusCode: http.StatusTeapot,
-		Body:       ioutil.NopCloser(strings.NewReader(`something or other`)),
+	for _, test := range unmarshalJSONResponseWithVariedJSONContentTypesTests {
+		c.Run(test.contentType, func(c *qt.C) {
+			resp := &http.Response{
+				Header: http.Header{
+					"Content-Type": {test.contentType},
+				},
+				StatusCode: http.StatusTeapot,
+				Body:       ioutil.NopCloser(strings.NewReader(`{}`)),
+			}
+			var val map[string]string
+			err := httprequest.UnmarshalJSONResponse(resp, &val)
+			if !test.expectError {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			c.Assert(err, qt.ErrorMatches, `unexpected content type `+regexp.QuoteMeta(test.contentType)+`; want application/json; content: "{}"`)
+			c.Assert(val, qt.IsNil)
+			assertDecodeResponseError(c, err, http.StatusTeapot, `{}`)
+		})
 	}
-	var val map[string]string
-	err := httprequest.UnmarshalJSONResponse(resp, &val)
-	c.Assert(err, qt.ErrorMatches, `unexpected content type foo/bar; want application/json; content: "something or other"`)
-	c.Assert(val, qt.IsNil)
-	assertDecodeResponseError(c, err, http.StatusTeapot, `something or other`)
 }
 
 func TestUnmarshalJSONResponseWithErrorAndLargeBody(t *testing.T) {
