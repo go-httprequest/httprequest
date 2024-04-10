@@ -615,9 +615,6 @@ func (h *testHandlers) M2(arg *m2Request) (int, error) {
 	return 999, nil
 }
 
-func (h *testHandlers) unexported() {
-}
-
 func (h *testHandlers) M3(arg *struct {
 	httprequest.Route `httprequest:"GET /m3/:p"`
 	P                 int `httprequest:"p,path"`

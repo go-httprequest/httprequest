@@ -3,7 +3,7 @@ package httprequest
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"reflect"
 
 	"gopkg.in/errgo.v1"
@@ -27,7 +27,7 @@ var (
 //	"path" - the field is taken from a parameter in p.PathVar
 //		with a matching field name.
 //
-// 	"form" - the field is taken from the given name in p.Request.Form
+//	"form" - the field is taken from the given name in p.Request.Form
 //		(note that this covers both URL query parameters and
 //		POST form parameters).
 //
@@ -43,8 +43,8 @@ var (
 //
 // - if the type is string, it will be set from the first value.
 //
-// - if the type is []string, it will be filled out using all values for that field
-//    (allowed only for form)
+//   - if the type is []string, it will be filled out using all values for that field
+//     (allowed only for form)
 //
 // - if the type implements encoding.TextUnmarshaler, its
 // UnmarshalText method will be used
@@ -160,7 +160,7 @@ func unmarshalBody(v reflect.Value, p Params, makeResult resultMaker) error {
 
 		return newDecodeRequestError(p.Request, fancyErr.body, fancyErr)
 	}
-	data, err := ioutil.ReadAll(p.Request.Body)
+	data, err := io.ReadAll(p.Request.Body)
 	if err != nil {
 		return errgo.Notef(err, "cannot read request body")
 	}

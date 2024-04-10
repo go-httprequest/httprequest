@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime"
 	"net/http"
 	"strings"
@@ -47,7 +46,7 @@ func newDecodeResponseError(resp *http.Response, bodyData []byte, err error) *De
 		bodyData = readBodyForError(resp.Body)
 	}
 	resp1 := *resp
-	resp1.Body = ioutil.NopCloser(bytes.NewReader(bodyData))
+	resp1.Body = io.NopCloser(bytes.NewReader(bodyData))
 
 	return &DecodeResponseError{
 		Response:    &resp1,
@@ -65,7 +64,7 @@ func newDecodeRequestError(req *http.Request, bodyData []byte, err error) *Decod
 		bodyData = readBodyForError(req.Body)
 	}
 	req1 := *req
-	req1.Body = ioutil.NopCloser(bytes.NewReader(bodyData))
+	req1.Body = io.NopCloser(bytes.NewReader(bodyData))
 
 	return &DecodeRequestError{
 		Request:     &req1,
@@ -110,7 +109,7 @@ func newFancyDecodeError(h http.Header, body io.Reader) *fancyDecodeError {
 }
 
 func readBodyForError(r io.Reader) []byte {
-	data, _ := ioutil.ReadAll(io.LimitReader(noErrorReader{r}, int64(maxErrorBodySize)))
+	data, _ := io.ReadAll(io.LimitReader(noErrorReader{r}, int64(maxErrorBodySize)))
 	return data
 }
 

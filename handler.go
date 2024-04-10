@@ -66,13 +66,10 @@ type handlerFunc struct {
 }
 
 var (
-	paramsType             = reflect.TypeOf(Params{})
-	errorType              = reflect.TypeOf((*error)(nil)).Elem()
-	contextType            = reflect.TypeOf((*context.Context)(nil)).Elem()
-	httpResponseWriterType = reflect.TypeOf((*http.ResponseWriter)(nil)).Elem()
-	httpHeaderType         = reflect.TypeOf(http.Header(nil))
-	httpRequestType        = reflect.TypeOf((*http.Request)(nil))
-	ioCloserType           = reflect.TypeOf((*io.Closer)(nil)).Elem()
+	paramsType   = reflect.TypeOf(Params{})
+	errorType    = reflect.TypeOf((*error)(nil)).Elem()
+	contextType  = reflect.TypeOf((*context.Context)(nil)).Elem()
+	ioCloserType = reflect.TypeOf((*io.Closer)(nil)).Elem()
 )
 
 // AddHandlers adds all the handlers in the given slice to r.
@@ -151,8 +148,8 @@ func (srv *Server) Handle(f interface{}) Handler {
 // returned by the given argument, which must be a function in one of the
 // following forms:
 //
-// 	func(p httprequest.Params) (T, context.Context, error)
-// 	func(p httprequest.Params, handlerArg I) (T, context.Context, error)
+//	func(p httprequest.Params) (T, context.Context, error)
+//	func(p httprequest.Params, handlerArg I) (T, context.Context, error)
 //
 // for some type T and some interface type I. Each exported method defined on T defines a handler,
 // and should be in one of the forms accepted by Server.Handle
