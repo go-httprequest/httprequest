@@ -6,8 +6,7 @@
 // It also provides a way to define methods as HTTP routes
 // using the same approach.
 //
-// It requires at least Go 1.7, and Go 1.9 is required if the importing
-// program also uses golang.org/x/net/context.
+// It requires at least Go 1.19.
 package httprequest
 
 import (
