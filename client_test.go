@@ -153,9 +153,7 @@ func TestCall(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	for _, test := range callTests {
 		c.Run(test.about, func(c *qt.C) {
@@ -185,9 +183,7 @@ func TestCallURLNoRequestPath(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	var client httprequest.Client
 	req := struct {
@@ -268,9 +264,7 @@ func TestDo(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	for _, test := range doTests {
 		test := test
@@ -302,9 +296,7 @@ func TestDoWithHTTPReponse(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
@@ -322,9 +314,7 @@ func TestDoWithHTTPReponseAndError(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer // Also check the body is closed.
 	client := &httprequest.Client{
@@ -343,9 +333,7 @@ func TestCallWithHTTPResponse(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
@@ -365,9 +353,7 @@ func TestCallClosesResponseBodyOnSuccess(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -388,9 +374,7 @@ func TestCallClosesResponseBodyOnError(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -407,9 +391,7 @@ func TestDoClosesResponseBodyOnSuccess(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -430,9 +412,7 @@ func TestDoClosesResponseBodyOnError(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -451,9 +431,7 @@ func TestGet(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	client := httprequest.Client{
 		BaseURL: srv.URL,
@@ -468,9 +446,7 @@ func TestGetNoBaseURL(t *testing.T) {
 	c := qt.New(t)
 
 	srv := newServer()
-	c.Cleanup(func() {
-		srv.Close()
-	})
+	c.Cleanup(srv.Close)
 
 	client := httprequest.Client{}
 	var resp chM1Resp
