@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -251,7 +250,7 @@ func UnmarshalJSONResponse(resp *http.Response, x interface{}) error {
 	// connection, but don't try *too* hard. Note that the
 	// usual number of additional bytes is 1 (a single newline
 	// after the JSON).
-	defer io.Copy(ioutil.Discard, io.LimitReader(resp.Body, 8*1024))
+	defer io.Copy(io.Discard, io.LimitReader(resp.Body, 8*1024))
 
 	if err := dec.Decode(x); err != nil {
 		return newDecodeResponseError(resp, bodyData, err)

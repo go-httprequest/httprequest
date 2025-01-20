@@ -5,7 +5,7 @@ package httprequest_test
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -475,14 +475,6 @@ var marshalTests = []struct {
 	},
 }}
 
-func getStruct() interface{} {
-	return &struct {
-		F1 string
-	}{
-		F1: "hello",
-	}
-}
-
 func TestMarshal(t *testing.T) {
 	c := qt.New(t)
 
@@ -503,7 +495,7 @@ func TestMarshal(t *testing.T) {
 				c.Assert(req.URL.String(), qt.Equals, test.expectURLString)
 			}
 			if test.expectBody != nil {
-				data, err := ioutil.ReadAll(req.Body)
+				data, err := io.ReadAll(req.Body)
 				c.Assert(err, qt.Equals, nil)
 				if *test.expectBody != "" && test.expectHeader["Content-Type"] == nil {
 					c.Assert(req.Header.Get("Content-Type"), qt.Equals, "application/json")

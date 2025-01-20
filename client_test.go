@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -86,7 +85,7 @@ var callTests = []struct {
 		err1, ok := errgo.Cause(err).(*httprequest.DecodeResponseError)
 		c.Assert(ok, qt.Equals, true, qt.Commentf("error not of type *httprequest.DecodeResponseError (%T)", errgo.Cause(err)))
 		c.Assert(err1.Response, qt.Not(qt.IsNil))
-		data, err := ioutil.ReadAll(err1.Response.Body)
+		data, err := io.ReadAll(err1.Response.Body)
 		c.Assert(err, qt.Equals, nil)
 		c.Assert(string(data), qt.Equals, "bad response")
 	},
@@ -99,7 +98,7 @@ var callTests = []struct {
 		err1, ok := errgo.Cause(err).(*httprequest.DecodeResponseError)
 		c.Assert(ok, qt.Equals, true, qt.Commentf("error not of type *httprequest.DecodeResponseError (%T)", errgo.Cause(err)))
 		c.Assert(err1.Response, qt.Not(qt.IsNil))
-		data, err := ioutil.ReadAll(err1.Response.Body)
+		data, err := io.ReadAll(err1.Response.Body)
 		c.Assert(err, qt.Equals, nil)
 		c.Assert(string(data), qt.Equals, "bad error value")
 		c.Assert(err1.Response.StatusCode, qt.Equals, http.StatusTeapot)
@@ -152,10 +151,9 @@ var callTests = []struct {
 
 func TestCall(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	for _, test := range callTests {
 		c.Run(test.about, func(c *qt.C) {
@@ -183,10 +181,9 @@ func TestCall(t *testing.T) {
 
 func TestCallURLNoRequestPath(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	var client httprequest.Client
 	req := struct {
@@ -263,16 +260,11 @@ var doTests = []struct {
 	expectResp: &chM2Resp{"foo", 999},
 }}
 
-func newInt64(i int64) *int64 {
-	return &i
-}
-
 func TestDo(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	for _, test := range doTests {
 		test := test
@@ -302,10 +294,9 @@ func TestDo(t *testing.T) {
 
 func TestDoWithHTTPReponse(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
@@ -314,17 +305,16 @@ func TestDoWithHTTPReponse(t *testing.T) {
 	err := client.Get(context.Background(), "/m1/foo", &resp)
 	c.Assert(err, qt.Equals, nil)
 	defer resp.Body.Close()
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	c.Assert(err, qt.Equals, nil)
 	c.Assert(string(data), qt.Equals, `{"P":"foo"}`)
 }
 
 func TestDoWithHTTPReponseAndError(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer // Also check the body is closed.
 	client := &httprequest.Client{
@@ -341,10 +331,9 @@ func TestDoWithHTTPReponseAndError(t *testing.T) {
 
 func TestCallWithHTTPResponse(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	client := &httprequest.Client{
 		BaseURL: srv.URL,
@@ -353,18 +342,18 @@ func TestCallWithHTTPResponse(t *testing.T) {
 	err := client.Call(context.Background(), &chM1Req{
 		P: "foo",
 	}, &resp)
+	c.Assert(err, qt.IsNil)
 	defer resp.Body.Close()
-	data, err := ioutil.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	c.Assert(err, qt.Equals, nil)
 	c.Assert(string(data), qt.Equals, `{"P":"foo"}`)
 }
 
 func TestCallClosesResponseBodyOnSuccess(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -383,10 +372,9 @@ func TestCallClosesResponseBodyOnSuccess(t *testing.T) {
 
 func TestCallClosesResponseBodyOnError(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -401,10 +389,9 @@ func TestCallClosesResponseBodyOnError(t *testing.T) {
 
 func TestDoClosesResponseBodyOnSuccess(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -423,10 +410,9 @@ func TestDoClosesResponseBodyOnSuccess(t *testing.T) {
 
 func TestDoClosesResponseBodyOnError(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	var doer closeCountingDoer
 	client := &httprequest.Client{
@@ -443,10 +429,9 @@ func TestDoClosesResponseBodyOnError(t *testing.T) {
 
 func TestGet(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	client := httprequest.Client{
 		BaseURL: srv.URL,
@@ -459,10 +444,9 @@ func TestGet(t *testing.T) {
 
 func TestGetNoBaseURL(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	srv := newServer()
-	c.Defer(srv.Close)
+	c.Cleanup(srv.Close)
 
 	client := httprequest.Client{}
 	var resp chM1Resp
@@ -479,7 +463,7 @@ func TestUnmarshalJSONResponseWithBodyReadError(t *testing.T) {
 			"Content-Type": {"application/json"},
 		},
 		StatusCode: http.StatusOK,
-		Body: ioutil.NopCloser(io.MultiReader(
+		Body: io.NopCloser(io.MultiReader(
 			strings.NewReader(`{"one": "two"}`),
 			errorReader("some bad read"),
 		)),
@@ -535,7 +519,7 @@ func TestUnmarshalJSONResponseWithVariedJSONContentTypes(t *testing.T) {
 					"Content-Type": {test.contentType},
 				},
 				StatusCode: http.StatusTeapot,
-				Body:       ioutil.NopCloser(strings.NewReader(`{}`)),
+				Body:       io.NopCloser(strings.NewReader(`{}`)),
 			}
 			var val map[string]string
 			err := httprequest.UnmarshalJSONResponse(resp, &val)
@@ -552,7 +536,6 @@ func TestUnmarshalJSONResponseWithVariedJSONContentTypes(t *testing.T) {
 
 func TestUnmarshalJSONResponseWithErrorAndLargeBody(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	c.Patch(httprequest.MaxErrorBodySize, 11)
 
@@ -561,7 +544,7 @@ func TestUnmarshalJSONResponseWithErrorAndLargeBody(t *testing.T) {
 			"Content-Type": {"foo/bar"},
 		},
 		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(strings.NewReader(`123456789 123456789`)),
+		Body:       io.NopCloser(strings.NewReader(`123456789 123456789`)),
 	}
 	var val map[string]string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
@@ -572,7 +555,6 @@ func TestUnmarshalJSONResponseWithErrorAndLargeBody(t *testing.T) {
 
 func TestUnmarshalJSONResponseWithLargeBody(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	c.Patch(httprequest.MaxErrorBodySize, 11)
 
@@ -581,7 +563,7 @@ func TestUnmarshalJSONResponseWithLargeBody(t *testing.T) {
 			"Content-Type": {"application/json"},
 		},
 		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(strings.NewReader(`"23456789 123456789"`)),
+		Body:       io.NopCloser(strings.NewReader(`"23456789 123456789"`)),
 	}
 	var val string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
@@ -597,7 +579,7 @@ func TestUnmarshalJSONWithDecodeError(t *testing.T) {
 			"Content-Type": {"application/json"},
 		},
 		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(strings.NewReader(`{"one": "two"}`)),
+		Body:       io.NopCloser(strings.NewReader(`{"one": "two"}`)),
 	}
 	var val chan string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
@@ -608,7 +590,6 @@ func TestUnmarshalJSONWithDecodeError(t *testing.T) {
 
 func TestUnmarshalJSONWithDecodeErrorAndLargeBody(t *testing.T) {
 	c := qt.New(t)
-	defer c.Done()
 
 	c.Patch(httprequest.MaxErrorBodySize, 11)
 
@@ -617,7 +598,7 @@ func TestUnmarshalJSONWithDecodeErrorAndLargeBody(t *testing.T) {
 			"Content-Type": {"application/json"},
 		},
 		StatusCode: http.StatusOK,
-		Body:       ioutil.NopCloser(strings.NewReader(`"23456789 123456789"`)),
+		Body:       io.NopCloser(strings.NewReader(`"23456789 123456789"`)),
 	}
 	var val chan string
 	err := httprequest.UnmarshalJSONResponse(resp, &val)
@@ -629,7 +610,7 @@ func TestUnmarshalJSONWithDecodeErrorAndLargeBody(t *testing.T) {
 func assertDecodeResponseError(c *qt.C, err error, status int, body string) {
 	err1, ok := errgo.Cause(err).(*httprequest.DecodeResponseError)
 	c.Assert(ok, qt.Equals, true, qt.Commentf("error not of type *httprequest.DecodeResponseError (%T)", errgo.Cause(err)))
-	data, err := ioutil.ReadAll(err1.Response.Body)
+	data, err := io.ReadAll(err1.Response.Body)
 	c.Assert(err, qt.Equals, nil)
 	c.Assert(err1.Response.StatusCode, qt.Equals, status)
 	c.Assert(string(data), qt.Equals, body)
@@ -847,39 +828,6 @@ type closeCountingReader struct {
 func (r *closeCountingReader) Close() error {
 	r.doer.closedBodies++
 	return r.ReadCloser.Close()
-}
-
-// largeReader implements a reader that produces up to total bytes
-// in 1 byte reads.
-type largeReader struct {
-	byte  byte
-	total int
-	n     int
-}
-
-func (r *largeReader) Read(buf []byte) (int, error) {
-	if r.n >= r.total {
-		return 0, io.EOF
-	}
-	r.n++
-	return copy(buf, []byte{r.byte}), nil
-}
-
-func (r *largeReader) Seek(offset int64, whence int) (int64, error) {
-	if offset != 0 || whence != 0 {
-		panic("unexpected seek")
-	}
-	r.n = 0
-	return 0, nil
-}
-
-func (r *largeReader) Close() error {
-	// By setting n to zero, we ensure that if there's
-	// a concurrent read, it will also read from n
-	// and so the race detector should pick up the
-	// problem.
-	r.n = 0
-	return nil
 }
 
 func isRemoteError(err error) bool {

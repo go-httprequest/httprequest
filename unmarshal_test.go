@@ -6,7 +6,6 @@ package httprequest_test
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -109,7 +108,7 @@ var unmarshalTests = []struct {
 	},
 }, {
 	about: "unexported fields are ignored",
-	val: sfG{
+	val: sG{
 		G: 99,
 	},
 	params: httprequest.Params{
@@ -430,8 +429,7 @@ type BodyWithPointer struct {
 	N *int
 }
 
-type sfG struct {
-	f int `httprequest:",form"`
+type sG struct {
 	G int `httprequest:",form"`
 }
 
@@ -450,7 +448,6 @@ type esFG struct {
 }
 
 type bsFG struct {
-	foo sFG `httprequest:",body"`
 }
 
 func TestUnmarshal(t *testing.T) {
@@ -467,7 +464,7 @@ func TestUnmarshal(t *testing.T) {
 				return
 			}
 			c.Assert(err, qt.Equals, nil)
-			c.Assert(fillv.Elem().Interface(), qt.CmpEquals(cmp.AllowUnexported(sfG{}, esFG{}, bsFG{})), test.val)
+			c.Assert(fillv.Elem().Interface(), qt.CmpEquals(cmp.AllowUnexported(sG{}, esFG{}, bsFG{})), test.val)
 		})
 
 	}
@@ -523,5 +520,5 @@ func (r errorReader) Close() error {
 }
 
 func body(s string) io.ReadCloser {
-	return ioutil.NopCloser(strings.NewReader(s))
+	return io.NopCloser(strings.NewReader(s))
 }

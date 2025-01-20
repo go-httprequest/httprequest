@@ -1,4 +1,5 @@
-// +build go1.8
+//go:build go1.19
+// +build go1.19
 
 package main
 
@@ -12,7 +13,6 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"io/ioutil"
 	"os"
 	"strings"
 	"text/template"
@@ -122,7 +122,7 @@ func generate(serverPkgPath, serverType, clientType string) error {
 
 func writeOutput(data []byte, clientType string) error {
 	filename := strings.ToLower(clientType) + "_generated.go"
-	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0644); err != nil {
 		return errgo.Mask(err)
 	}
 	return nil
@@ -235,7 +235,7 @@ func docComment(pkg *packages.Package, sel *types.Selection) string {
 		return true
 	}, nil)
 	if !declFound {
-		panic(fmt.Sprintf("method declaration not found"))
+		panic("method declaration not found")
 	}
 	return comment
 }
